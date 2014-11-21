@@ -81,6 +81,7 @@ def excel_date(datestring):
     return float(delta.days) + (float(delta.seconds) / 86400)
 
 def load_tweets_from_csv(filename):
+    # TODO: make these sets - we just iterate over them
     tweets = {'avg':[], 'user':[]}
     csv_file = "{}/{}".format(twitter_data_dir, filename)
     if os.path.isfile(csv_file):
@@ -216,7 +217,7 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
     print "-----"
 
 
-def process_tweet(last_tweet_was_user_tweet, saved_tweets, tw, cached, tweets_to_use):
+def process_tweet(last_tweet_was_user_tweet, saved_tweets, tw, cached, tweets_from_csv):
     """
     categorizes the passed-in tweet as a user tweet, first response tweet, or support tweet
     :param last_tweet_was_user_tweet: flag to indicate if last tweet processed was a user tweet (to detect dupes)
@@ -242,8 +243,10 @@ def process_tweet(last_tweet_was_user_tweet, saved_tweets, tw, cached, tweets_to
             # it's a user tweet AFTER a user tweet, so skip it and we'll keep the first one
             print u"[MULTIUSER- IGNORE][{}] {} [{}]".format(c, text, url)
 
-        #remove it from the dict of user tweets to track tweets with missing responses
-        if tw.id in tweets_to_use['user']: tweets_to_use['user'].remove(tw.id)
+        #remove it from the dict of user tweets to track tweets that AVG has not responded to
+        if tw.id in tweets_from_csv['user']: 
+            tweets_from_csv['user'].remove(tw.id)
+            
         print "Removing user tweet {}".format(tw.id)
     else:  # one of our tweets
         last_tweet_was_user_tweet = False
@@ -285,6 +288,9 @@ def cache_tweet(cached_tweets, tw):
 
     return cached_tweets
 
+def write_unanswered_tweets(user_tweet_ids):
+    pass
+
 def write_output_csv(csv_data, csv_file, csv_headers):
     # write our data to the CSV file
     with open(csv_file, 'wb') as fou:
@@ -319,14 +325,15 @@ def get_twitter_gos(args):
     For each tweet we find from Radian6, I:
 
     - get the ID from the URL
-    - use ID to look up tweet from Twitter API (only time we hit API) - pausing 0.3 sec after each call
+    - use ID to look up tweet from Twitter API (only time we hit API) - pausing 0.2 sec after each call [pause is off]
     - check if tweet is by AVG or not
     - walk the conversation back from original tweet to last user tweet
-    - keep track of which tweets are from support (have a '^JM' or '#AVGSupport' hashtag)
+    - keep track of which tweets are from support (have a '^JM' or '#AVGSupport' hashtag for example)
     - after processing whole conversation we've got original user tweet and our first replies (support + regular) - note
         that our first reply may be BOTH a support and a regular tweet (quite often actually)
     - calculate time difference in hours between them
     - write out an Excel-friendly CSV containing the data (see csv_headers variable for what's contained in file)
+    - write out a table to an Excel file containing the data (done after the CSV code)
 
     Notes:
 
@@ -364,10 +371,10 @@ def get_twitter_gos(args):
     # get the list of tweets we get from Radian6's XML or CSV export
     # for testing you can use a slice of the list (every nth element where n is
     # the number after the ::)
-    #tweets_to_use = load_tweets_from_csv()#[::22]
+    #tweet_ids_from_csv = load_tweets_from_csv()#[::22]
     # for individual  unit testing
-    tweets_to_use = [args.status_id] if args.status_id else load_tweets_from_csv(args.input)
-    #tweets_to_use = ["525654285120708608"]
+    tweet_ids_from_csv = [args.status_id] if args.status_id else load_tweets_from_csv(args.input)
+    #tweet_ids_from_csv = ["525654285120708608"]
 
     # filename of our output file
     csv_first_file = "%s/first_touch_results.csv" % twitter_data_dir
@@ -396,11 +403,11 @@ def get_twitter_gos(args):
         pass
 
     try:
-        for tweet in tweets_to_use['avg']:
+        for tweet in tweet_ids_from_csv['avg']:
 
             # data structure to hold the latest tweets in our
             # parsing of a conversation thread
-            saved_tweets = {"user_tweet": None,
+            support_tweets = {"user_tweet": None,
                             "first_touch": None,
                             "first_support": None}
 
@@ -409,7 +416,7 @@ def get_twitter_gos(args):
             # used as a flag for debugging output
             already_seen = False # this is a tweet we've never seen before as far as we know
 
-            # while we have a valid tweet (ID)
+            # while we have a valid tweet (ID) from an AVG account
             while tweet_id:
 
                 # only hit the API for tweets we've not seen before... As we walk back through
@@ -417,17 +424,21 @@ def get_twitter_gos(args):
                 # from Radian6 import is also a tweet we get back from the API
                 if tweet_id not in processed:
 
-                    processed.add(tweet_id) # store the tweet id so we don't process it again
+                    processed.add(tweet_id) # store the tweet id in the set so we don't process it again
 
                     # for debugging output
                     cached = False
 
+                    # check to see if we have a fully-reconstituted Status object from the cache. If so,
+                    # use it instead of hitting the API
+                    # TODO: This should be a DB call
                     if tweet_id in cached_tweets.keys():
                         tw = cached_tweets[tweet_id]
+                        # again, debugging flag only
                         cached = True
                     else:
                         try:
-                            global api
+                            global api #Python scope rules: any global assigned locally is overwritten and becomes local
                             if not api:
                                 api = twitter.Api(consumer_key=TWITTER.TWITTER_CONSUMER_KEY,
                                                   consumer_secret=TWITTER.TWITTER_CONSUMER_SECRET,
@@ -459,29 +470,32 @@ def get_twitter_gos(args):
                             continue # resume next loop iteration and try again
 
                     last_tweet_was_user_tweet = process_tweet(last_tweet_was_user_tweet,
-                                                              saved_tweets,
+                                                              support_tweets,
                                                               tw,
                                                               cached,
-                                                              tweets_to_use)
+                                                              tweet_ids_from_csv)
                 else:
                     # set flag for debugging output below
                     already_seen = True
                     print "[ALREADY SEEN THIS ID] %s" % str(tweet_id)
                     break
 
-                # set the next tweet id
+                # follow the conversation thread back by setting the id of the
+                # next tweet to the previous one in the thread
                 tweet_id = tw.in_reply_to_status_id
 
             # add a row to the data structure we'll write to a CSV file
-            add_csv_row(already_seen, csv_data, excel_data, saved_tweets)
+            add_csv_row(already_seen, csv_data, excel_data, support_tweets)
 
             # clean up
-            del saved_tweets
+            del support_tweets
 
     # twitter threw exception we can't recover from, write out what we can
     except TwitterUnrecoverableException:
         write_cached_tweets(tweets_to_cache)
         return
+    
+    write_unanswered_tweets(tweet_ids_from_csv['user'])
 
     # write out tweets to cache
     write_cached_tweets(tweets_to_cache)
@@ -490,8 +504,6 @@ def get_twitter_gos(args):
     write_output_csv(csv_data["support"], csv_support_file, csv_headers)
 
     write_to_excel(excel_data, args.output)
-
-    pprint(tweets_to_use)
 
     #if len(tweets_to_cache):
     #    with open(tweets_file, 'wb') as fp:
