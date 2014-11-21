@@ -8,7 +8,7 @@ from re import search, IGNORECASE
 from pprint import pprint
 import os.path
 import argparse
-import errno
+from errno import EEXIST
 import json
 import twitter
 import csv
@@ -24,7 +24,7 @@ def make_sure_path_exists(path):
     try:
         os.makedirs(path)
     except OSError as exception:
-        if exception.errno != errno.EEXIST:  # ignore the error if the path already exists
+        if exception.errno != EEXIST:  # ignore the error if the path already exists
             raise
 
 def GetUrl(self):
@@ -236,7 +236,7 @@ def process_tweet(last_tweet_was_user_tweet, saved_tweets, tw, cached, tweets_to
     text = tw.GetTweetDetail()
     url = tw.GetUrl()
     # is this a user tweet?
-    if tw.user.id not in avg_twitter_ids:
+    if tw.user.id not in TWITTER.TWITTER_USER_IDS:
         # and not multiple user tweets in a row?
         if not last_tweet_was_user_tweet:
             saved_tweets["user_tweet"] = tw  # save it in our data structure to track important ones
