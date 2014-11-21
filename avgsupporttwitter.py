@@ -48,7 +48,7 @@ def GetTweetDetail(self):
     return s
 
 def GetTweetTimeForExcel(self):
-    s = parse(self.created_at).strftime("%m/%d/%Y %I:%M:%S %p")
+    s = parse(self.created_at).strftime(TWITTER.TWITTER_TIME_FORMAT)
     return s
 
 # hacky way to extend a class at runtime but don't know how to do it otherwise
