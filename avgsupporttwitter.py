@@ -2,7 +2,6 @@
 __author__ = 'cappy'
 
 import datetime
-import time
 from dateutil.parser import parse
 import excelwriter
 from re import search, IGNORECASE
@@ -14,6 +13,7 @@ import json
 import twitter
 import csv
 from csvdict import DictUnicodeWriter, DictUnicodeReader
+from tlinsights.constants import TWITTER
 
 
 def make_sure_path_exists(path):
@@ -56,11 +56,6 @@ twitter.Status.GetUrl = GetUrl
 twitter.Status.AsJsonString = PrettyTweet
 twitter.Status.GetTweetDetail = GetTweetDetail
 twitter.Status.GetTweetTimeForExcel = GetTweetTimeForExcel
-
-TWITTER_CONSUMER_KEY = 'riHaA3FNKboupg5jsW1S1gkCl'
-TWITTER_CONSUMER_SECRET = 'NnJ6NdQFY5r1RRwOrBwDiZXWurkfApDG15kvT0ZDiN0ClaSISi'
-TWITTER_ACCESS_KEY = '61781392-S52Cc52hjreuzQZpKB4SevYMHlLQo3OWLLOBuDB0c'
-TWITTER_ACCESS_SECRET = 'TQSD6PdGryWg9RrXubJTCaVT3MgOWK2BRJws6xyXZvzYp'
 
 # column headers for our output csv file and for
 # csv_row dictionary
@@ -438,10 +433,10 @@ def get_twitter_gos(args):
                         try:
                             global api
                             if not api:
-                                api = twitter.Api(consumer_key=TWITTER_CONSUMER_KEY,
-                                                  consumer_secret=TWITTER_CONSUMER_SECRET,
-                                                  access_token_key=TWITTER_ACCESS_KEY,
-                                                  access_token_secret=TWITTER_ACCESS_SECRET)
+                                api = twitter.Api(consumer_key=TWITTER.TWITTER_CONSUMER_KEY,
+                                                  consumer_secret=TWITTER.TWITTER_CONSUMER_SECRET,
+                                                  access_token_key=TWITTER.TWITTER_ACCESS_KEY,
+                                                  access_token_secret=TWITTER.TWITTER_ACCESS_SECRET)
 
                             # get the next tweet via Twitter API,
                             # remove all entities (pics, vids, etc.)
