@@ -224,10 +224,6 @@ def process_tweet(last_tweet_was_user_tweet, saved_tweets, tw, cached, tweets_to
     :param tw: the raw tweet from the API or cache
     :return: last_tweet_was_user_tweet [True|False]
     """
-    # IDs of AVG Twitter accounts - used to flag tweets
-    # as coming from us or users
-    avg_twitter_ids = [61781392, #AVGFree
-                       142353967] #AVGSupport
 
     # debugging aid
     c = 'C' if cached else 'N'
