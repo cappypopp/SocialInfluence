@@ -57,6 +57,11 @@ twitter.Status.AsJsonString = PrettyTweet
 twitter.Status.GetTweetDetail = GetTweetDetail
 twitter.Status.GetTweetTimeForExcel = GetTweetTimeForExcel
 
+# used because python has no labeled breaks - we will throw this when Twitter throws an
+# exception due to hitting rate limit or over capacity - two things we can do nothing about
+class TwitterUnrecoverableException(Exception):
+    pass
+
 # column headers for our output csv file and for
 # csv_row dictionary
 
@@ -199,7 +204,6 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
                 csv_support_row["PostId"],
                 csv_support_row["Post"],
                 csv_support_row["PostDate"],
-                #csv_support_row["PostDateReal"],
                 csv_support_row["PostMessage"],
                 csv_support_row["ReplyDate"],
                 csv_support_row["ReplyMessage"],
@@ -288,8 +292,63 @@ def cache_tweet(cached_tweets, tw):
 
     return cached_tweets
 
-def write_unanswered_tweets(user_tweet_ids):
-    pass
+def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, excel_data):
+
+    excel_data['unanswered'] = []
+
+    row = {}
+
+    tw = None
+
+    try:
+
+        for tweet_id in user_tweet_ids:
+            if tweet_id not in tweets_to_cache.keys():
+                try:
+                    global api
+                    if not api:
+                        api = twitter.Api(consumer_key=TWITTER.TWITTER_CONSUMER_KEY,
+                                          consumer_secret=TWITTER.TWITTER_CONSUMER_SECRET,
+                                          access_token_key=TWITTER.TWITTER_ACCESS_KEY,
+                                          access_token_secret=TWITTER.TWITTER_ACCESS_SECRET)
+
+                    tweet = api.GetStatus(tweet_id, include_entities=False)
+
+                    # store the tweet in the cache so we won't have to look it up again
+                    tweets_to_cache = cache_tweet(tweets_to_cache, tweet)
+
+                    tw = tweet.AsDict()
+                except twitter.TwitterError as te:
+                    code = te.args[0][0]["code"]
+                    pprint(te)
+                    # you'll occasionally get 404's etc as users delete tweets
+                    if 88 == code or 130 == code:
+                        print "%s... TRY AGAIN IN 15 MINUTES" % te.args[0][0]["message"]
+                        rls = api.GetRateLimitStatus()
+                        print "RATE LIMIT WILL RENEW AT {}".format(
+                            datetime.datetime.fromtimestamp(
+                                rls["resources"]["statuses"]["/statuses/lookup"]["reset"]
+                            ).strftime("%I:%M:%S %p")
+                        )
+                        raise TwitterUnrecoverableException
+                    continue
+            else:
+                # can this ever happen? Can we have a tweet in the cache that is unreplied to? I don't think so
+                print "This tweet was in cache but unanswered: {}".format(tweet_id)
+                tw = tweets_to_cache[tweet_id]
+
+            row["PostId"] = tw["id"]
+            row["Post"] = "http://twitter.com/{}/status/{}".format(tw["user"]["id"], tw['id'])
+            row["PostDate"] = parse(tw["created_at"]).strftime(TWITTER.TWITTER_TIME_FORMAT)
+            row["PostMessage"] = tw["text"]
+
+            excel_data['unanswered'].append(row)
+
+     # twitter threw exception we can't recover from, write out what we can
+    except TwitterUnrecoverableException:
+        write_cached_tweets(tweets_to_cache)
+        return
+
 
 def write_output_csv(csv_data, csv_file, csv_headers):
     # write our data to the CSV file
@@ -397,11 +456,6 @@ def get_twitter_gos(args):
     # be reconstituted into full Status objects.
     cached_tweets, tweets_to_cache = load_tweets_from_json()
 
-    # used because python has no labeled breaks - we will throw this when Twitter throws an
-    # exception due to hitting rate limit or over capacity - two things we can do nothing about
-    class TwitterUnrecoverableException(Exception):
-        pass
-
     try:
         for tweet in tweet_ids_from_csv['avg']:
 
@@ -495,7 +549,7 @@ def get_twitter_gos(args):
         write_cached_tweets(tweets_to_cache)
         return
     
-    write_unanswered_tweets(tweet_ids_from_csv['user'])
+    write_unanswered_tweets(tweet_ids_from_csv['user'], tweets_to_cache, excel_data)
 
     # write out tweets to cache
     write_cached_tweets(tweets_to_cache)
