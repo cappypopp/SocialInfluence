@@ -12,7 +12,7 @@ from errno import EEXIST
 import json
 import twitter
 import csv
-from csvdict import DictUnicodeWriter, DictUnicodeReader
+from csvdict import DictUnicodeWriter
 from tlinsights.constants import TWITTER
 
 
@@ -27,33 +27,38 @@ def make_sure_path_exists(path):
         if exception.errno != EEXIST:  # ignore the error if the path already exists
             raise
 
-def GetUrl(self):
-    #http://twitter.com/{twitter-user-id}/status/{tweet-status-id}
+
+def get_url(self):
+    # http://twitter.com/{twitter-user-id}/status/{tweet-status-id}
     return "http://twitter.com/%s/status/%s" % (str(self.user.id), str(self._id))
 
-def PrettyTweet(self, allow_non_ascii=False):
 
+def pretty_tweet(self, allow_non_ascii=False):
     '''A JSON string representation of this twitter.Status instance.
 
     To output non-ascii, set keyword allow_non_ascii=True.
 
+    :param self:
+    :param allow_non_ascii:
     Returns:
       A JSON string representation of this twitter.Status instance
    '''
     return twitter.simplejson.dumps(self.AsDict(), sort_keys=True, indent=2,
-               ensure_ascii= not allow_non_ascii )
+                                    ensure_ascii=not allow_non_ascii)
+
 
 def GetTweetDetail(self):
     s = "%s [%s]" % (self.text, self.GetTweetTimeForExcel())
     return s
+
 
 def GetTweetTimeForExcel(self):
     s = parse(self.created_at).strftime(TWITTER.TWITTER_TIME_FORMAT)
     return s
 
 # hacky way to extend a class at runtime but don't know how to do it otherwise
-twitter.Status.GetUrl = GetUrl
-twitter.Status.AsJsonString = PrettyTweet
+twitter.Status.GetUrl = get_url
+twitter.Status.AsJsonString = pretty_tweet
 twitter.Status.GetTweetDetail = GetTweetDetail
 twitter.Status.GetTweetTimeForExcel = GetTweetTimeForExcel
 
@@ -79,15 +84,17 @@ api = None
 twitter_data_dir = "twitter-gos-data"
 tweets_file = "%s/tweets.json" % twitter_data_dir
 
+
 def excel_date(datestring):
     temp = datetime.datetime(1899, 12, 30)
     date1 = datetime.datetime.strptime(datestring, "%m/%d/%Y %I:%M:%S %p")
     delta = date1 - temp
     return float(delta.days) + (float(delta.seconds) / 86400)
 
+
 def load_tweets_from_csv(filename):
     # TODO: make these sets - we just iterate over them
-    tweets = {'avg':[], 'user':[]}
+    tweets = {'avg': [], 'user': []}
     csv_file = "{}/{}".format(twitter_data_dir, filename)
     if os.path.isfile(csv_file):
         with open(csv_file, 'rb') as fp:
@@ -109,6 +116,7 @@ def load_tweets_from_csv(filename):
     pprint(tweets)
     return tweets
 
+
 def load_tweets_from_json():
     """
     loads the cached tweets we've saved from previous runs - to get around rate limiter
@@ -116,8 +124,8 @@ def load_tweets_from_json():
     :return:
     a dict containing all the tweets we've seen before
     """
-    rehydrated_tweets = {} # will hold full Status objects
-    tweets_to_cache = {} # will hold tweets that are to be cached at end of run
+    rehydrated_tweets = {}  # will hold full Status objects
+    tweets_to_cache = {}  # will hold tweets that are to be cached at end of run
     if os.path.isfile(tweets_file):
         try:
             with open(tweets_file, 'rb') as fp:
@@ -138,16 +146,16 @@ def load_tweets_from_json():
         print "%s - FILE NOT FOUND" % tweets_file
 
     print("{} tweet loaded from cache".format(len(rehydrated_tweets)))
-    #pprint(tweets_to_cache)
+    # pprint(tweets_to_cache)
 
-    return (rehydrated_tweets,tweets_to_cache)
+    return (rehydrated_tweets, tweets_to_cache)
 
 
 def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
     # verify that we've found first touch and user tweets and placed them in our data structure
     if saved_tweets["first_touch"] and saved_tweets["user_tweet"]:
 
-#PostID	Post	PostDate	PostMessage	ReplyDate	ReplyMessage	GOS
+        # PostID	Post	PostDate	PostMessage	ReplyDate	ReplyMessage	GOS
 
         csv_first_row = {}
 
@@ -160,10 +168,10 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
         csv_first_row["PostId"] = ut.GetId()
         csv_first_row["Post"] = ut.GetUrl()
         csv_first_row["PostDate"] = ut.GetTweetTimeForExcel()
-        csv_first_row["PostMessage"] = ut.GetText()#.encode('utf8')
+        csv_first_row["PostMessage"] = ut.GetText()  #.encode('utf8')
 
         csv_first_row["ReplyDate"] = ft.GetTweetTimeForExcel()
-        csv_first_row["ReplyMessage"] = ft.GetText()#.encode('utf8')
+        csv_first_row["ReplyMessage"] = ft.GetText()  #.encode('utf8')
         csv_first_row["GOS"] = time_between_tweets_in_hours(ut, ft)
 
         #pprint(csv_first_row)
@@ -184,16 +192,15 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
 
         # only fill in support data if it's present
         if fs:
-
             csv_support_row = {}
 
             csv_support_row["PostId"] = ut.GetId()
             csv_support_row["Post"] = ut.GetUrl()
             csv_support_row["PostDate"] = ut.GetTweetTimeForExcel()
-            csv_support_row["PostMessage"] = ut.GetText()#.encode('utf-8')
+            csv_support_row["PostMessage"] = ut.GetText()  #.encode('utf-8')
 
             csv_support_row["ReplyDate"] = fs.GetTweetTimeForExcel()
-            csv_support_row["ReplyMessage"] = fs.GetText()#.encode('utf-8')
+            csv_support_row["ReplyMessage"] = fs.GetText()  #.encode('utf-8')
             csv_support_row["GOS"] = time_between_tweets_in_hours(ut, fs)
 
             #pprint(csv_support_row)
@@ -247,8 +254,8 @@ def process_tweet(last_tweet_was_user_tweet, saved_tweets, tw, cached, tweets_fr
             # it's a user tweet AFTER a user tweet, so skip it and we'll keep the first one
             print u"[MULTIUSER- IGNORE][{}] {} [{}]".format(c, text, url)
 
-        #remove it from the dict of user tweets to track tweets that AVG has not responded to
-        if tw.id in tweets_from_csv['user']: 
+        # remove it from the dict of user tweets to track tweets that AVG has not responded to
+        if tw.id in tweets_from_csv['user']:
             tweets_from_csv['user'].remove(tw.id)
             print "Removing user tweet {}".format(tw.id)
     else:  # one of our tweets
@@ -268,6 +275,7 @@ def process_tweet(last_tweet_was_user_tweet, saved_tweets, tw, cached, tweets_fr
             print u"[SOLO ROOT TWEET: {}][{}] {} [{}]".format(tw.user.name, c, text, url)
 
     return last_tweet_was_user_tweet
+
 
 def write_cached_tweets(cached_tweets):
     with open(tweets_file, "wb ") as fp:
@@ -291,8 +299,8 @@ def cache_tweet(cached_tweets, tw):
 
     return cached_tweets
 
-def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, excel_data):
 
+def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, excel_data):
     excel_data['unanswered'] = []
 
     row = {}
@@ -341,9 +349,11 @@ def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, excel_data):
             row["PostDate"] = parse(tw["created_at"]).strftime(TWITTER.TWITTER_TIME_FORMAT)
             row["PostMessage"] = tw["text"]
 
+            pprint(row)
+
             excel_data['unanswered'].append(row)
 
-     # twitter threw exception we can't recover from, write out what we can
+            # twitter threw exception we can't recover from, write out what we can
     except TwitterUnrecoverableException:
         write_cached_tweets(tweets_to_cache)
         return
@@ -358,10 +368,11 @@ def write_output_csv(csv_data, csv_file, csv_headers):
         for result_row in csv_data:
             dw.writerow(result_row)
 
-def write_to_excel(excel_data, filename="TW-FirstTouchDataTest.xlsx"):
 
-    sheet_names = [{"name": "TW-First Touch Data", "key": "first"},
-                   {"name": "TW-Support First Touch Data", "key": "support"}]
+def write_to_excel(excel_data, filename="TW-FirstTouchDataTest.xlsx"):
+    sheet_names = [{"name": "TW-First Touch Data", "key": "first", "headers": csv_headers},
+                   {"name": "TW-Support First Touch Data", "key": "support", "headers": csv_headers},
+                   {"name": "TW-Unanswered", "key": "unanswered", "headers": csv_headers[0:4]}]  # slice the headers
 
     w = excelwriter.ExcelWriter()
 
@@ -369,9 +380,10 @@ def write_to_excel(excel_data, filename="TW-FirstTouchDataTest.xlsx"):
 
     for sheet in sheet_names:
         w.add_sheet(sheet["name"])
-        w.write_twitter_gos_data_for(sheet["name"], csv_headers, excel_data[sheet["key"]])
+        w.write_twitter_gos_data_for(sheet["name"], sheet["headers"], excel_data[sheet["key"]])
 
     w.close_workbook()
+
 
 def get_twitter_gos(args):
     """
@@ -419,8 +431,8 @@ def get_twitter_gos(args):
 
     # used to hold the data we'll write to the CSV at the end; we'll create 2 csv's: one for first touch
     # and one for support
-    csv_data = {"first":[],
-                "support":[]}
+    csv_data = {"first": [],
+                "support": []}
 
     # used to hold data for Excel
     excel_data = {"first": [],
@@ -429,7 +441,7 @@ def get_twitter_gos(args):
     # get the list of tweets we get from Radian6's XML or CSV export
     # for testing you can use a slice of the list (every nth element where n is
     # the number after the ::)
-    #tweet_ids_from_csv = load_tweets_from_csv()#[::22]
+    # tweet_ids_from_csv = load_tweets_from_csv()#[::22]
     # for individual  unit testing
     tweet_ids_from_csv = [args.status_id] if args.status_id else load_tweets_from_csv(args.input)
     #tweet_ids_from_csv = ["525654285120708608"]
@@ -461,13 +473,13 @@ def get_twitter_gos(args):
             # data structure to hold the latest tweets in our
             # parsing of a conversation thread
             support_tweets = {"user_tweet": None,
-                            "first_touch": None,
-                            "first_support": None}
+                              "first_touch": None,
+                              "first_support": None}
 
-            tweet_id = tweet # cache id for inner loop
+            tweet_id = tweet  # cache id for inner loop
 
             # used as a flag for debugging output
-            already_seen = False # this is a tweet we've never seen before as far as we know
+            already_seen = False  # this is a tweet we've never seen before as far as we know
 
             # while we have a valid tweet (ID) from an AVG account
             while tweet_id:
@@ -477,7 +489,7 @@ def get_twitter_gos(args):
                 # from Radian6 import is also a tweet we get back from the API
                 if tweet_id not in processed:
 
-                    processed.add(tweet_id) # store the tweet id in the set so we don't process it again
+                    processed.add(tweet_id)  # store the tweet id in the set so we don't process it again
 
                     # for debugging output
                     cached = False
@@ -491,7 +503,7 @@ def get_twitter_gos(args):
                         cached = True
                     else:
                         try:
-                            global api #Python scope rules: any global assigned locally is overwritten and becomes local
+                            global api  #Python scope rules: any global assigned locally is overwritten and becomes local
                             if not api:
                                 api = twitter.Api(consumer_key=TWITTER.TWITTER_CONSUMER_KEY,
                                                   consumer_secret=TWITTER.TWITTER_CONSUMER_SECRET,
@@ -519,8 +531,8 @@ def get_twitter_gos(args):
                                         rls["resources"]["statuses"]["/statuses/lookup"]["reset"]
                                     ).strftime("%I:%M:%S %p")
                                 )
-                                raise TwitterUnrecoverableException # break out of inner loop
-                            continue # resume next loop iteration and try again
+                                raise TwitterUnrecoverableException  # break out of inner loop
+                            continue  # resume next loop iteration and try again
 
                     last_tweet_was_user_tweet = process_tweet(last_tweet_was_user_tweet,
                                                               support_tweets,
@@ -547,7 +559,7 @@ def get_twitter_gos(args):
     except TwitterUnrecoverableException:
         write_cached_tweets(tweets_to_cache)
         return
-    
+
     write_unanswered_tweets(tweet_ids_from_csv['user'], tweets_to_cache, excel_data)
 
     # write out tweets to cache
@@ -562,17 +574,19 @@ def get_twitter_gos(args):
     #    with open(tweets_file, 'wb') as fp:
     #        json.dump(tweets_to_cache.values(), fp)
 
+
 def time_between_tweets_in_hours(tw1, tw2):
     tweet1_time = parse(tw1.created_at)
     tweet2_time = parse(tw2.created_at)
     diff = tweet2_time - tweet1_time
-    return "{:0.1f}".format(diff.total_seconds()/60/60)
+    return "{:0.1f}".format(diff.total_seconds() / 60 / 60)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Creates csv containing Gauge of Service data for tweets",
                                      version='%(prog)s 1.0')
     parser.add_argument("-id", "--status_id", type=int, help="Tweet ID")
-    #parser.add_argument("-t", "--access_token", type=str, default="rDFfVkx9dIyfjdni3AUEnA", nargs="?",
+    # parser.add_argument("-t", "--access_token", type=str, default="rDFfVkx9dIyfjdni3AUEnA", nargs="?",
     #                    help='Twitter access token')
     parser.add_argument("-o", "--output", type=str, help="output file [*.xlsx]")
     parser.add_argument("-i", "--input", type=str, help="input file [*.csv]")
