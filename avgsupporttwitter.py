@@ -250,8 +250,7 @@ def process_tweet(last_tweet_was_user_tweet, saved_tweets, tw, cached, tweets_fr
         #remove it from the dict of user tweets to track tweets that AVG has not responded to
         if tw.id in tweets_from_csv['user']: 
             tweets_from_csv['user'].remove(tw.id)
-            
-        print "Removing user tweet {}".format(tw.id)
+            print "Removing user tweet {}".format(tw.id)
     else:  # one of our tweets
         last_tweet_was_user_tweet = False
         if search(r"\^JM|\^ZP|#AVGSupport|@AVGSupport", tw.text, IGNORECASE):  # scan tweet text for support indicators
