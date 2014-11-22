@@ -24,7 +24,6 @@ class ExcelWriter(object):
                         "col_width": 13.5,
                         "format": {"font_size": 9,
                                    "num_format": "mm/dd/yy hh:mm:ss" },
-                        #"date_format": "mm/dd/yy hh:mm:ss"
                        },
                        {"name": "PostMessage",
                         "col_width": 50,

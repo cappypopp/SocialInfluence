@@ -148,7 +148,7 @@ def load_tweets_from_json():
     print("{} tweet loaded from cache".format(len(rehydrated_tweets)))
     # pprint(tweets_to_cache)
 
-    return (rehydrated_tweets, tweets_to_cache)
+    return rehydrated_tweets, tweets_to_cache
 
 
 def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
