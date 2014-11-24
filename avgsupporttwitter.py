@@ -302,8 +302,6 @@ def cache_tweet(cached_tweets, tw):
 
 def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, excel_data):
 
-    row = {}
-
     try:
 
         for tweet_id in user_tweet_ids:
@@ -341,10 +339,11 @@ def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, excel_data):
                 print "This tweet was in cache but unanswered: {}".format(tweet_id)
                 tw = tweets_to_cache[tweet_id]
 
-            row["PostId"] = tw["id"]
-            row["Post"] = "http://twitter.com/{}/status/{}".format(tw["user"]["id"], tw['id'])
-            row["PostDate"] = parse(tw["created_at"]).strftime(TWITTER.TWITTER_TIME_FORMAT)
-            row["PostMessage"] = tw["text"]
+            row = []
+            row.append(tw["id"])
+            row.append("http://twitter.com/{}/status/{}".format(tw["user"]["id"], tw['id']))
+            row.append(parse(tw["created_at"]).strftime(TWITTER.TWITTER_TIME_FORMAT))
+            row.append(tw["text"])
 
             pprint(row)
 
