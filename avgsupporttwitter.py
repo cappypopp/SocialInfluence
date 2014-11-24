@@ -24,7 +24,7 @@ def make_sure_path_exists(path):
     try:
         os.makedirs(path)
     except OSError as exception:
-        if exception.errno != EEXIST:  # ignore the error if the path already exists
+        if EEXIST != exception.errno:  # ignore the error if the path already exists
             raise
 
 
@@ -168,13 +168,13 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
         csv_first_row["PostId"] = ut.GetId()
         csv_first_row["Post"] = ut.GetUrl()
         csv_first_row["PostDate"] = ut.GetTweetTimeForExcel()
-        csv_first_row["PostMessage"] = ut.GetText()  #.encode('utf8')
+        csv_first_row["PostMessage"] = ut.GetText()  # .encode('utf8')
 
         csv_first_row["ReplyDate"] = ft.GetTweetTimeForExcel()
-        csv_first_row["ReplyMessage"] = ft.GetText()  #.encode('utf8')
+        csv_first_row["ReplyMessage"] = ft.GetText()  # .encode('utf8')
         csv_first_row["GOS"] = time_between_tweets_in_hours(ut, ft)
 
-        #pprint(csv_first_row)
+        # pprint(csv_first_row)
 
         csv_data["first"].append(csv_first_row)
 
@@ -221,7 +221,7 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
 
     elif already_seen:
         print "<<ALREADY PROCESSED THREAD>>"
-        already_seen = False
+        # already_seen = False
     else:
         # was a root tweet (like a status update that no one cared about)
         print "NO REPLIES"
@@ -305,8 +305,6 @@ def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, excel_data):
 
     row = {}
 
-    tw = None
-
     try:
 
         for tweet_id in user_tweet_ids:
@@ -370,9 +368,15 @@ def write_output_csv(csv_data, csv_file, csv_headers):
 
 
 def write_to_excel(excel_data, filename="TW-FirstTouchDataTest.xlsx"):
-    sheet_names = [{"name": "TW-First Touch Data", "key": "first", "headers": csv_headers},
-                   {"name": "TW-Support First Touch Data", "key": "support", "headers": csv_headers},
-                   {"name": "TW-Unanswered", "key": "unanswered", "headers": csv_headers[0:4]}]  # slice the headers
+    sheet_names = [{"name": "TW-First Touch Data",
+                    "key": "first",
+                    "headers": csv_headers},
+                   {"name": "TW-Support First Touch Data",
+                    "key": "support",
+                    "headers": csv_headers},
+                   {"name": "TW-Unanswered",
+                    "key": "unanswered",
+                    "headers": csv_headers[0:4]}]  # slice the headers
 
     w = excelwriter.ExcelWriter()
 
@@ -385,12 +389,14 @@ def write_to_excel(excel_data, filename="TW-FirstTouchDataTest.xlsx"):
     w.close_workbook()
 
 
-def get_twitter_gos(args):
+def get_twitter_gos(cmd_line_args):
     """
     Opens a list of Tweets exported from Radian6 and calculates the Gauge of Service
     for them. I use Radian6 because it's the only way I can be guaranteed to get all our tweets between 2 dates easily.
     Twitter only serves up your last 3200 tweets and search is VERY limited to only popular and recent tweets - up to
     Twitter's discretion, effectively making it useless for us in this case.
+
+    :param cmd_line_args: tweet id if passed
 
     For each tweet we find from Radian6, I:
 
@@ -443,8 +449,8 @@ def get_twitter_gos(args):
     # the number after the ::)
     # tweet_ids_from_csv = load_tweets_from_csv()#[::22]
     # for individual  unit testing
-    tweet_ids_from_csv = [args.status_id] if args.status_id else load_tweets_from_csv(args.input)
-    #tweet_ids_from_csv = ["525654285120708608"]
+    tweet_ids_from_csv = [cmd_line_args.status_id] if cmd_line_args.status_id else load_tweets_from_csv(cmd_line_args.input)
+    # tweet_ids_from_csv = ["525654285120708608"]
 
     # filename of our output file
     csv_first_file = "%s/first_touch_results.csv" % twitter_data_dir
@@ -568,7 +574,7 @@ def get_twitter_gos(args):
     write_output_csv(csv_data["first"], csv_first_file, csv_headers)
     write_output_csv(csv_data["support"], csv_support_file, csv_headers)
 
-    write_to_excel(excel_data, args.output)
+    write_to_excel(excel_data, cmd_line_args.output)
 
     #if len(tweets_to_cache):
     #    with open(tweets_file, 'wb') as fp:
@@ -587,7 +593,7 @@ if __name__ == '__main__':
                                      version='%(prog)s 1.0')
     parser.add_argument("-id", "--status_id", type=int, help="Tweet ID")
     # parser.add_argument("-t", "--access_token", type=str, default="rDFfVkx9dIyfjdni3AUEnA", nargs="?",
-    #                    help='Twitter access token')
+    # help='Twitter access token')
     parser.add_argument("-o", "--output", type=str, help="output file [*.xlsx]")
     parser.add_argument("-i", "--input", type=str, help="input file [*.csv]")
     args = parser.parse_args()
