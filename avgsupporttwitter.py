@@ -367,23 +367,14 @@ def write_output_csv(csv_data, csv_file, csv_headers):
 
 
 def write_to_excel(excel_data, filename="TW-FirstTouchDataTest.xlsx"):
-    sheet_names = [{"name": "TW-First Touch Data",
-                    "key": "first",
-                    "headers": csv_headers},
-                   {"name": "TW-Support First Touch Data",
-                    "key": "support",
-                    "headers": csv_headers},
-                   {"name": "TW-Unanswered",
-                    "key": "unanswered",
-                    "headers": csv_headers[0:4]}]  # slice the headers
 
     w = excelwriter.ExcelWriter()
 
     w.create_workbook("{}/{}".format(twitter_data_dir, filename))
 
-    for sheet in sheet_names:
-        w.add_sheet(sheet["name"])
-        w.write_twitter_gos_data_for(sheet["name"], sheet["headers"], excel_data[sheet["key"]])
+    for sheet_name, twitter_data in excel_data.iteritems():
+        w.add_sheet(sheet_name)
+        w.write_twitter_gos_data_for(sheet_name, twitter_data)
 
     w.close_workbook()
 
