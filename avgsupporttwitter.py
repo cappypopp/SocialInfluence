@@ -188,7 +188,7 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
             csv_first_row["GOS"]
         ]
 
-        excel_data["first"].append(excel_first_row)
+        excel_data["TW-First Touch Data"].append(excel_first_row)
 
         # only fill in support data if it's present
         if fs:
@@ -217,7 +217,7 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
                 csv_support_row["GOS"]
             ]
 
-            excel_data["support"].append(excel_support_row)
+            excel_data["TW-Support First Touch Data"].append(excel_support_row)
 
     elif already_seen:
         print "<<ALREADY PROCESSED THREAD>>"
@@ -301,7 +301,6 @@ def cache_tweet(cached_tweets, tw):
 
 
 def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, excel_data):
-    excel_data['unanswered'] = []
 
     row = {}
 
@@ -349,7 +348,7 @@ def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, excel_data):
 
             pprint(row)
 
-            excel_data['unanswered'].append(row)
+            excel_data['TW-Unanswered'].append(row)
 
             # twitter threw exception we can't recover from, write out what we can
     except TwitterUnrecoverableException:
@@ -441,8 +440,9 @@ def get_twitter_gos(cmd_line_args):
                 "support": []}
 
     # used to hold data for Excel
-    excel_data = {"first": [],
-                  "support": []}
+    excel_data = {"TW-First Touch Data": [],
+                  "TW-Support First Touch Data": [],
+                  "TW-Unanswered": []}
 
     # get the list of tweets we get from Radian6's XML or CSV export
     # for testing you can use a slice of the list (every nth element where n is
