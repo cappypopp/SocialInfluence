@@ -71,34 +71,37 @@ class ExcelWriter(object):
         self._wb.close()
 
 
-    def _add_table_to_worksheet(self, data, headers, name):
+    def _add_table_to_worksheet(self, data, name):
         """
         adds an Excel table to a worksheet
         :param data: raw data to add - just used to calculate dimensions
-        :param headers: used to set custom headers for table
         :param name: name of worksheet on which to put table
         :return: None
         """
-        options = self._build_table_options(headers, data, name) # build options object to pass to API
-        row_count = len(data) + 1 # have to add one for the header row
-        end_col_letter = chr(len(data[0]) + ord('A') - 1) # get the final column letter (easier for debugging)
-        tbl_range = "A1:{}{:d}".format(end_col_letter, row_count) # build the table range in Excel letter notation
+
+        col_count = len(data[0])
+        options = self._build_table_options(col_count, name)  # build options object to pass to API
+        row_count = len(data) + 1  # have to add one for the header row
+        end_col_letter = chr(col_count + ord('A') - 1)  # get the final column letter (easier for debugging)
+        tbl_range = "A1:{}{:d}".format(end_col_letter, row_count)  # build the table range in Excel letter notation
         ws = self[name]
-        hdr = self.COLUMN_HEADERS
-        ws.add_table(tbl_range, options) # add the table to the worksheet
+        hdr = self.COLUMN_HEADERS[0:col_count]
+        ws.add_table(tbl_range, options)  # add the table to the worksheet
 
         #write the data to each row
         for row_num, row in enumerate(data):
+            # we need to start the row number at 1 for Excel, there is no row 0
             rn = row_num + 1
             ws.write_number(rn, 0, int(row[0]), hdr[0]["format"])
             ws.write_url(rn, 1, row[1], hdr[1]["format"], "LINK")
-            ws.write_datetime(rn, 2, datetime.datetime.strptime(row[2],self.DEFAULT_DATE_FORMAT), hdr[2]["format"])
+            ws.write_datetime(rn, 2, datetime.datetime.strptime(row[2], self.DEFAULT_DATE_FORMAT), hdr[2]["format"])
             ws.write_string(rn, 3, row[3], hdr[3]["format"])
-            ws.write_datetime(rn, 4, datetime.datetime.strptime(row[4],self.DEFAULT_DATE_FORMAT),  hdr[4]["format"])
-            ws.write_string(rn, 5, row[5], hdr[5]["format"])
-            ws.write_number(rn, 6, float(row[6]),  hdr[6]["format"])
+            if col_count > 4: # I THINK THIS SUCKS
+                ws.write_datetime(rn, 4, datetime.datetime.strptime(row[4], self.DEFAULT_DATE_FORMAT),  hdr[4]["format"])
+                ws.write_string(rn, 5, row[5], hdr[5]["format"])
+                ws.write_number(rn, 6, float(row[6]),  hdr[6]["format"])
 
-    def write_twitter_gos_data_for(self, name, headers, data):
+    def write_twitter_gos_data_for(self, name, data):
         """
         sets column headers, column width, and adds the table of data to the spreadsheet
         :param name: name of sheet to write to
@@ -108,8 +111,6 @@ class ExcelWriter(object):
         """
         if name not in self._ws.keys():
             raise ValueError("sheet % not found" % name)
-        elif len(headers) != len(data[0]):
-            raise ValueError("Headers length does not match row length")
         else:
             """
             for i, header in enumerate(headers):
@@ -122,7 +123,7 @@ class ExcelWriter(object):
 
             self._add_table_to_worksheet(data, headers, name)
             """
-            for i, hdr in enumerate(self.COLUMN_HEADERS):
+            for i, hdr in enumerate(self.COLUMN_HEADERS[0:len(data[0])]):
                 #hdr = self.COLUMN_HEADERS[i]
                 width = hdr["col_width"]
                 fmt = self._wb.add_format()
@@ -135,18 +136,20 @@ class ExcelWriter(object):
                     fmt.set_num_format(hdr["date_format"])
                 self._ws[name].set_column(i, i, width, fmt) # set column widths
 
-            self._add_table_to_worksheet(data, headers, name)
+            self._add_table_to_worksheet(data, name)
 
 
-    def _build_table_options(self, headers, data, name):
+    def _build_table_options(self, length, name):
+
+        # create a dict in the format required by Excel lib. We only want headers for the columns of
+        # data we have, thus the slice
         """
-        creates the table options object we pass to the add_table() method
-        :param headers: ignored REMOVE
-        :param data: ignored REMOVE
+        Builds options object for creating a table using the Excel library
+        :param length: length of headers required (6 for first/support touch ,4 for unanswered)
+        :param name: name of sheet; used to name table
         :return: options object
         """
-
-        header_row = [{'header': hdr["name"]} for hdr in self.COLUMN_HEADERS]
+        header_row = [{'header': hdr["name"]} for hdr in self.COLUMN_HEADERS[0:length]]
 
         #for h in headers:
         #    header_row.append({
@@ -166,7 +169,7 @@ class ExcelWriter(object):
         :param item: name of worksheet
         :return: worksheet object specified by name
         """
-        if not isinstance(item,str):
+        if not isinstance(item, str):
             raise ValueError("sheet name required")
         else:
             return self._ws[item]
