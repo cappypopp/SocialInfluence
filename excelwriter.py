@@ -5,7 +5,8 @@ import datetime
 import json
 
 
-class ExcelWriter:
+class ExcelWriter(object):
+
     DEFAULT_DATE_FORMAT = "%m/%d/%Y %I:%M:%S %p"
     EXCEL_FILE_EXTENSION = ".xlsx"
 
