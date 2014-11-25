@@ -9,9 +9,20 @@ class ExcelWriter:
     DEFAULT_DATE_FORMAT = "%m/%d/%Y %I:%M:%S %p"
     EXCEL_FILE_EXTENSION = ".xlsx"
 
-    # could make this a class, but probably more verbose...
-
     class ColumnFormat:
+        """ Encapsulates the formatting and functions needed to format data for cells within an Excel column
+
+        Attributes:
+            workbook: XlsxWriter Workbook object
+            name: column header name
+            col_width: width of column in Excel units
+            format_obj: properties object for use in Format() constructor
+            data_format: lambda function to format data for use in column
+            text_wrap: True: wrap text, False: don't
+            excel_format_func: text name of XlsxWriter data writing method to add values to a cell
+            excel_format_func_args: extra arguments for writing function, if any (like link name for write_url)
+
+        """
         def __init__(self,
                      workbook=None,
                      name="",
@@ -196,14 +207,8 @@ class ExcelWriter:
         :param name: name of sheet; used to name table
         :return: options object
         """
-        # header_row = [{'header': hdr["name"]} for hdr in self.COLUMN_HEADERS[0:length]]
 
         headers = [{'header': header.name} for header in self._col_headers[0:length]]
-
-        # for h in headers:
-        # header_row.append({
-        # 'header': h
-        # })
 
         table_options = {
             'style': 'Table Style Light 9',  # med blue background headers with white bold text, no banding, row lines
