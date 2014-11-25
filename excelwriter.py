@@ -51,6 +51,17 @@ class ExcelWriter:
         self._wb = None
         self._col_headers = []
 
+    @staticmethod
+    def excel_date(date_string):
+        """ Returns an Excel date which is number of minutes since 1900 + some portion of a day
+        :param date_string: string representation of a date - human-readable
+        :return: float used in excel (like 45890.3)
+        """
+        temp = datetime.datetime(1899, 12, 30)
+        date1 = datetime.datetime.strptime(date_string, ExcelWriter.DEFAULT_DATE_FORMAT)
+        delta = date1 - temp
+        return float(delta.days) + (float(delta.seconds) / 86400)
+
     def create_workbook(self, name):
 
         if ExcelWriter.EXCEL_FILE_EXTENSION not in name:
