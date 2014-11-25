@@ -35,44 +35,6 @@ class ExcelWriter:
 
             self.format = workbook.add_format(format) if format else None
 
-
-    COLUMN_HEADERS = [ {"name": "PostId",
-                        "col_width": 11.3,
-                        "format": {"font_size": 9},
-                        "data_format": lambda x: int(x)},
-                       {"name": "Post",
-                        "col_width": 5.5,
-                        "format": {"font_size": 9,
-                                   "underline": 1,
-                                   "color": "blue"},
-                        "data_format": lambda x: x},
-                       {"name": "PostDate",
-                        "col_width": 13.5,
-                        "format": {"font_size": 9,
-                                   "num_format": "mm/dd/yy hh:mm:ss" },
-                        "data_format": lambda x: datetime.datetime.strptime(x, ExcelWriter.DEFAULT_DATE_FORMAT)
-                       },
-                       {"name": "PostMessage",
-                        "col_width": 50,
-                        "format": None,
-                        "text_wrap": True,
-                        "data_format": lambda x: x },
-                       {"name": "ReplyDate",
-                        "col_width": 13.5,
-                        "format": {"font_size": 9,
-                                   "num_format": "mm/dd/yy hh:mm:ss" },
-                        "data_format": lambda x: datetime.datetime.strptime(x, ExcelWriter.DEFAULT_DATE_FORMAT)
-                       },
-                       {"name": "ReplyMessage",
-                        "col_width": 50,
-                        "format": None,
-                        "text_wrap": True,
-                        "data_format": lambda x: x},
-                       {"name": "GOS",
-                        "col_width": 4,
-                        "format": None,
-                        "data_format": lambda x: float(x)}]
-
     def __init__(self):
         self._ws = {}
 
@@ -212,27 +174,9 @@ class ExcelWriter:
         end_col_letter = chr(col_count + ord('A') - 1)  # get the final column letter (easier for debugging)
         tbl_range = "A1:{}{:d}".format(end_col_letter, row_count)  # build the table range in Excel letter notation
         ws = self[name]
-        hdr = self.COLUMN_HEADERS[0:col_count]
         ws.add_table(tbl_range, options)  # add the table to the worksheet
 
         self._add_data_to_table(ws, col_count, row_count, data)
-
-        return
-
-        #write the data to each row
-        for row_num, row in enumerate(data):
-            # we need to start the row number at 1 for Excel, there is no row 0
-            rn = row_num + 1
-            # either need a format function (or lambda) for each of these or I have to hard-code logic to
-            # handle differing column lengths
-            ws.write_number(rn, 0, int(row[0]), hdr[0]["format"])
-            ws.write_url(rn, 1, row[1], hdr[1]["format"], "LINK")
-            ws.write_datetime(rn, 2, datetime.datetime.strptime(row[2], self.DEFAULT_DATE_FORMAT), hdr[2]["format"])
-            ws.write_string(rn, 3, row[3], hdr[3]["format"])
-            if col_count > 4: # I THINK THIS SUCKS
-                ws.write_datetime(rn, 4, datetime.datetime.strptime(row[4], self.DEFAULT_DATE_FORMAT),  hdr[4]["format"])
-                ws.write_string(rn, 5, row[5], hdr[5]["format"])
-                ws.write_number(rn, 6, float(row[6]),  hdr[6]["format"])
 
     def write_twitter_gos_data_for(self, name, data):
         """
