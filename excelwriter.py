@@ -3,7 +3,6 @@ __author__ = 'cappy'
 import xlsxwriter
 import datetime
 import json
-from xlsxwriter.format import Format
 
 class ExcelWriter:
 
@@ -147,7 +146,7 @@ class ExcelWriter:
                 arg_tuple = (rn,
                              col_num,
                              hdr.data_format(row[col_num]), # call the lambda to format this cell
-                             hdr.format) # the format dict for the Excel library
+                             hdr.format) # the format dict for the Excel library (already a Format object)
 
                 if hdr.excel_format_func_args:
                     # any add'l args to pass to the write fn will be appended in a singleton tuple (note the
