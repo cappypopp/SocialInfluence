@@ -372,8 +372,9 @@ def write_to_excel(excel_data, filename="TW-FirstTouchDataTest.xlsx"):
     w.create_workbook("{}/{}".format(twitter_data_dir, filename))
 
     for sheet_name, twitter_data in excel_data.iteritems():
-        w.add_sheet(sheet_name)
-        w.write_twitter_gos_data_for(sheet_name, twitter_data)
+        with open("{}/{}.json".format(twitter_data_dir, sheet_name), "wb") as fp:
+            json.dump(twitter_data, fp)
+        w.add_sheet(sheet_name, twitter_data)
 
     w.close_workbook()
 
@@ -579,6 +580,7 @@ def time_between_tweets_in_hours(tw1, tw2):
 
 
 if __name__ == '__main__':
+    #-i 1_1416582603663159.csv -o TwitterData_11_21.xlsx
     parser = argparse.ArgumentParser(description="Creates csv containing Gauge of Service data for tweets",
                                      version='%(prog)s 1.0')
     parser.add_argument("-id", "--status_id", type=int, help="Tweet ID")
