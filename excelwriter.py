@@ -178,46 +178,6 @@ class ExcelWriter:
 
         self._add_data_to_table(ws, col_count, row_count, data)
 
-    def write_twitter_gos_data_for(self, name, data):
-        """
-        sets column headers, column width, and adds the table of data to the spreadsheet
-        :param name: name of sheet to write to
-        :param headers: list of headers in order
-        :param data: raw data to write to rows
-        :return: None
-        """
-        if name not in self._ws.keys():
-            raise ValueError("sheet % not found" % name)
-        else:
-            """
-            for i, header in enumerate(headers):
-                # need to explicitly do this because you can't call str(x) on a unicode string or you'll get
-                # an encoding exception. It won't harm unicode already-encoded strings (all the text already) and will
-                # convert all other strings to utf8 strings to get their length
-                encoded_text_for_col_width = unicode(data[0][i]).encode('utf-8')
-
-                self._ws[name].set_column(i, i, len(encoded_text_for_col_width)) # set column widths
-
-            self._add_table_to_worksheet(data, headers, name)
-
-
-            for i, hdr in enumerate(self.COLUMN_HEADERS[0:len(data[0])]):
-                #hdr = self.COLUMN_HEADERS[i]
-                width = hdr["col_width"]
-                fmt = self._wb.add_format()
-
-                #text wrap and date formats don't mess up headers, font size does so it needs to go on cells
-                # also, cell-based formatting overwrites column in most cases!
-                if "text_wrap" in hdr:
-                    fmt.set_text_wrap()
-                if "date_format" in hdr:
-                    fmt.set_num_format(hdr["date_format"])
-                self._ws[name].set_column(i, i, width, fmt) # set column widths
-
-            self._add_table_to_worksheet(data, name)
-            """
-            pass
-
     def _build_table_options(self, length, name):
 
         # create a dict in the format required by Excel lib. We only want headers for the columns of
