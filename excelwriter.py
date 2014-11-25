@@ -62,7 +62,7 @@ class ExcelWriter:
 
         post_date = ExcelWriter.ColumnFormat(workbook=self._wb,
                                              name="PostDate",
-                                             col_width=11.3,
+                                             col_width=13.5,
                                              format={"font_size": 9,
                                                      "num_format": "mm/dd/yy hh:mm:ss"},
                                              data_format=lambda x: datetime.datetime.strptime(x, ExcelWriter.DEFAULT_DATE_FORMAT),
