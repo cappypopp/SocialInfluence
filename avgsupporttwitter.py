@@ -260,7 +260,7 @@ def process_tweet(last_tweet_was_user_tweet, saved_tweets, tw, cached, tweets_fr
             print "Removing user tweet {}".format(tw.id)
     else:  # one of our tweets
         last_tweet_was_user_tweet = False
-        if search(r"\^JM|\^ZP|#AVGSupport|@AVGSupport", tw.text, IGNORECASE):  # scan tweet text for support indicators
+        if search(r"\^JM|\^ZP|\^ZCS|\^AHS|#AVGSupport|@AVGSupport", tw.text, IGNORECASE):  # scan tweet text for support indicators
             saved_tweets["first_support"] = tw
             saved_tweets["first_touch"] = tw  # support tweets are also first touch tweets
             print u"[SUPPORT/FIRST: {}][{}] {} [{}]".format(tw.user.name, c, text, url)
