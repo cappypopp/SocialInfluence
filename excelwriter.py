@@ -179,7 +179,7 @@ class ExcelWriter(object):
                 arg_tuple = (rn,
                              col_num,
                              header.data_format(row[col_num]),  # call the lambda to format this cell
-                             header.format)  # the format dict for the Excel library (already a Format object)
+                             header.format_obj)  # the format dict for the Excel library (already a Format object)
 
                 if header.excel_format_func_args:
                     # any add'l args to pass to the write fn will be appended in a singleton tuple (note the
