@@ -628,10 +628,6 @@ def get_twitter_gos(cmd_line_args):
 
     write_to_excel(excel_data, cmd_line_args.output)
 
-    # if len(tweets_to_cache):
-    #    with open(tweets_file, 'wb') as fp:
-    #        json.dump(tweets_to_cache.values(), fp)
-
 
 def time_between_tweets_in_hours(tw1, tw2):
     tweet1_time = parse(tw1.created_at)
