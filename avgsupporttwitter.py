@@ -1,4 +1,5 @@
 #! /usr/bin/env python
+
 __author__ = 'cappy'
 
 import datetime
@@ -13,7 +14,8 @@ import json
 import twitter
 import csv
 from csvdict import DictUnicodeWriter
-from tlinsights.constants import TWITTER
+from tlinsights.constants import DB, TWITTER
+from tlinsights import db
 
 
 def make_sure_path_exists(path):
@@ -190,6 +192,10 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
         # pprint(csv_first_row)
 
         csv_data["first"].append(csv_first_row)
+        db_list = csv_first_row.copy()  # shallow-copy the dict to add new fields to not upset old code
+        db_list["ReplyPostId"] = ft.GetId()  # needed for DB
+        db_list["GOSType"] = "first_touch"
+        db.save_gos_interaction(db_list)
 
         excel_first_row = [
             csv_first_row["PostId"],
@@ -219,6 +225,11 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
             # pprint(csv_support_row)
 
             csv_data["support"].append(csv_support_row)
+            # TODO: fix this
+            db_list = csv_support_row.copy()  # shallow-copy the dict for DB to not mess up existing code
+            db_list["ReplyPostId"] = fs.GetId()  # needed for DB
+            db_list["GOSType"] = "support"
+            db.save_gos_interaction(db_list)
 
             excel_support_row = [
                 csv_support_row["PostId"],
