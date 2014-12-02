@@ -83,6 +83,7 @@ api = None
 
 twitter_data_dir = "twitter-gos-data"
 tweets_file = "%s/tweets.json" % twitter_data_dir
+dead_tweets_file = "{}/dead_tweets.json".format(twitter_data_dir)
 
 
 def excel_date(datestring):
@@ -126,6 +127,7 @@ def load_tweets_from_json():
     """
     rehydrated_tweets = {}  # will hold full Status objects
     tweets_to_cache = {}  # will hold tweets that are to be cached at end of run
+    dead_tweets = []
     if os.path.isfile(tweets_file):
         try:
             with open(tweets_file, 'rb') as fp:
@@ -145,10 +147,21 @@ def load_tweets_from_json():
     else:
         print "%s - FILE NOT FOUND" % tweets_file
 
-    print("{} tweet loaded from cache".format(len(rehydrated_tweets)))
-    # pprint(tweets_to_cache)
+    if os.path.isfile(dead_tweets_file):
+        try:
+            with open(dead_tweets_file, 'rb') as fp:
+                # Python Twitter API can't store full Status (tweet) objects in JSON for whatever reason
+                # so we store them as raw dicts and load those via JSON decoder
+                dead_tweets = json.load(fp)
 
-    return rehydrated_tweets, tweets_to_cache
+        except ValueError as ve:
+            pprint(ve)
+    else:
+        print "%s - FILE NOT FOUND" % dead_tweets_file
+
+    print("{} tweet loaded from cache".format(len(rehydrated_tweets)))
+
+    return rehydrated_tweets, tweets_to_cache, dead_tweets
 
 
 def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
@@ -197,13 +210,13 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
             csv_support_row["PostId"] = ut.GetId()
             csv_support_row["Post"] = ut.GetUrl()
             csv_support_row["PostDate"] = ut.GetTweetTimeForExcel()
-            csv_support_row["PostMessage"] = ut.GetText()  #.encode('utf-8')
+            csv_support_row["PostMessage"] = ut.GetText()  # .encode('utf-8')
 
             csv_support_row["ReplyDate"] = fs.GetTweetTimeForExcel()
-            csv_support_row["ReplyMessage"] = fs.GetText()  #.encode('utf-8')
+            csv_support_row["ReplyMessage"] = fs.GetText()  # .encode('utf-8')
             csv_support_row["GOS"] = time_between_tweets_in_hours(ut, fs)
 
-            #pprint(csv_support_row)
+            # pprint(csv_support_row)
 
             csv_data["support"].append(csv_support_row)
 
@@ -260,7 +273,8 @@ def process_tweet(last_tweet_was_user_tweet, saved_tweets, tw, cached, tweets_fr
             print "Removing user tweet {}".format(tw.id)
     else:  # one of our tweets
         last_tweet_was_user_tweet = False
-        if search(r"\^JM|\^ZP|\^ZCS|\^AHS|#AVGSupport|@AVGSupport", tw.text, IGNORECASE):  # scan tweet text for support indicators
+        if search(r"\^JM|\^ZP|\^ZCS|\^AHS|#AVGSupport|@AVGSupport", tw.text,
+                  IGNORECASE):  # scan tweet text for support indicators
             saved_tweets["first_support"] = tw
             saved_tweets["first_touch"] = tw  # support tweets are also first touch tweets
             print u"[SUPPORT/FIRST: {}][{}] {} [{}]".format(tw.user.name, c, text, url)
@@ -277,9 +291,11 @@ def process_tweet(last_tweet_was_user_tweet, saved_tweets, tw, cached, tweets_fr
     return last_tweet_was_user_tweet
 
 
-def write_cached_tweets(cached_tweets):
+def write_cached_tweets(cached_tweets, tweets_not_found):
     with open(tweets_file, "wb ") as fp:
         json.dump(cached_tweets.values(), fp)
+    with open(dead_tweets_file, "wb") as fp:
+        json.dump(tweets_not_found, fp)
 
 
 def cache_tweet(cached_tweets, tw):
@@ -300,11 +316,14 @@ def cache_tweet(cached_tweets, tw):
     return cached_tweets
 
 
-def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, excel_data):
-
+def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, tweets_not_found, excel_data):
     try:
 
         for tweet_id in user_tweet_ids:
+            # only hit the API if we need to
+            if tweet_id in tweets_not_found:
+                print "[TWEET NOT FOUND {} - SKIPPING]".format(tweet_id)
+                continue
             if tweet_id not in tweets_to_cache.keys():
                 try:
                     global api
@@ -333,6 +352,11 @@ def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, excel_data):
                             ).strftime("%I:%M:%S %p")
                         )
                         raise TwitterUnrecoverableException
+                    if 34 == code:
+                        # tweet not found - either the original user deleted it or twitter is not
+                        # providing it via the API.
+                        print "TWEET {} NOT FOUND - REMOVING FROM FUTURE RUNS".format(tweet_id)
+                        tweets_not_found.append(tweet_id)  # save the tweet in our cache of '34' tweets
                     continue
             else:
                 # can this ever happen? Can we have a tweet in the cache that is unreplied to? I don't think so
@@ -356,27 +380,28 @@ def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, excel_data):
 
 
 def write_output_csv(csv_data, csv_file, csv_headers):
-    # write our data to the CSV file
-    with open(csv_file, 'wb') as fou:
-        fou.write(u'\ufeff'.encode('utf8'))  # need this line to make Excel treat CSV as Unicode
-        dw = DictUnicodeWriter(fou, fieldnames=csv_headers)
-        dw.writeheader()
-        for result_row in csv_data:
-            dw.writerow(result_row)
+    if len(csv_data):
+        # write our data to the CSV file
+        with open(csv_file, 'wb') as fou:
+            fou.write(u'\ufeff'.encode('utf8'))  # need this line to make Excel treat CSV as Unicode
+            dw = DictUnicodeWriter(fou, fieldnames=csv_headers)
+            dw.writeheader()
+            for result_row in csv_data:
+                dw.writerow(result_row)
 
 
 def write_to_excel(excel_data, filename="TW-FirstTouchDataTest.xlsx"):
+    if len(excel_data['TW-First Touch Data']):
+        w = excelwriter.ExcelWriter()
 
-    w = excelwriter.ExcelWriter()
+        w.create_workbook("{}/{}".format(twitter_data_dir, filename))
 
-    w.create_workbook("{}/{}".format(twitter_data_dir, filename))
+        for sheet_name, twitter_data in excel_data.iteritems():
+            with open("{}/{}.json".format(twitter_data_dir, sheet_name), "wb") as fp:
+                json.dump(twitter_data, fp)
+            w.add_sheet(sheet_name, twitter_data)
 
-    for sheet_name, twitter_data in excel_data.iteritems():
-        with open("{}/{}.json".format(twitter_data_dir, sheet_name), "wb") as fp:
-            json.dump(twitter_data, fp)
-        w.add_sheet(sheet_name, twitter_data)
-
-    w.close_workbook()
+        w.close_workbook()
 
 
 def get_twitter_gos(cmd_line_args):
@@ -440,7 +465,8 @@ def get_twitter_gos(cmd_line_args):
     # the number after the ::)
     # tweet_ids_from_csv = load_tweets_from_csv()#[::22]
     # for individual  unit testing
-    tweet_ids_from_csv = [cmd_line_args.status_id] if cmd_line_args.status_id else load_tweets_from_csv(cmd_line_args.input)
+    tweet_ids_from_csv = {'avg': [cmd_line_args.status_id]} if cmd_line_args.status_id else load_tweets_from_csv(
+        cmd_line_args.input)
     # tweet_ids_from_csv = ["525654285120708608"]
 
     # filename of our output file
@@ -462,7 +488,10 @@ def get_twitter_gos(cmd_line_args):
     # that need to be cached. They will be stored as dicts during the run, then JSON-serialized and written
     # to the cache (overwritten each time - can't figure out how to append) on exit. On next run they will
     # be reconstituted into full Status objects.
-    cached_tweets, tweets_to_cache = load_tweets_from_json()
+    # tweets_not_found: tweets that return 'not found' error 34 from the API - we are tracking them so that we
+    # don't call the API for them using up one of our valuable 180 calls per 15 minutes via the rate limiter.
+    # Note we can't use a set here because they are not serializable to JSON by default
+    cached_tweets, tweets_to_cache, tweets_not_found = load_tweets_from_json()
 
     try:
         for tweet in tweet_ids_from_csv['avg']:
@@ -477,6 +506,9 @@ def get_twitter_gos(cmd_line_args):
 
             # used as a flag for debugging output
             already_seen = False  # this is a tweet we've never seen before as far as we know
+
+            # ID of the tweet reply
+            parent_id = None
 
             # while we have a valid tweet (ID) from an AVG account
             while tweet_id:
@@ -498,9 +530,15 @@ def get_twitter_gos(cmd_line_args):
                         tw = cached_tweets[tweet_id]
                         # again, debugging flag only
                         cached = True
+                    elif tweet_id in tweets_not_found:
+                        # if this tweet is one of the ones that twitter returns a status 34 for (not found) then just
+                        # skip it - not worth wasting a valuable rate-limited API call on it again
+                        print "[DEAD TWEET DETECTED {} - REMOVING THREAD]".format(tweet_id)
+                        tweet_id = None # to break the loop on the next iteration
+                        continue
                     else:
                         try:
-                            global api  #Python scope rules: any global assigned locally is overwritten and becomes local
+                            global api  # Python scope rules: any global assigned locally is overwritten and becomes local
                             if not api:
                                 api = twitter.Api(consumer_key=TWITTER.TWITTER_CONSUMER_KEY,
                                                   consumer_secret=TWITTER.TWITTER_CONSUMER_SECRET,
@@ -514,7 +552,7 @@ def get_twitter_gos(cmd_line_args):
                             # store the tweet in the cache so we won't have to look it up again
                             tweets_to_cache = cache_tweet(tweets_to_cache, tw)
 
-                            #sleep(0.2) # play nice with the API to avoid rate limits
+                            # sleep(0.2) # play nice with the API to avoid rate limits
 
                         except twitter.TwitterError as te:
                             code = te.args[0][0]["code"]
@@ -529,6 +567,20 @@ def get_twitter_gos(cmd_line_args):
                                     ).strftime("%I:%M:%S %p")
                                 )
                                 raise TwitterUnrecoverableException  # break out of inner loop
+                            if 34 == code:
+                                # tweet not found - either the original user deleted it or twitter is not
+                                # providing it via the API.
+                                tweets_not_found.append(tweet_id)  # save the tweet in our cache of '34' tweets
+
+                                if parent_id:
+                                    # we are in the middle of conversation thread - clear the support tweets
+                                    # and move on with the next conversation. Also cache the tweet ID so we can track
+                                    # these and ignore in the future
+                                    support_tweets = None
+                                    print("[DEAD THREAD - REMOVING]")
+
+                                    # TODO: where do we go from here?
+
                             continue  # resume next loop iteration and try again
 
                     last_tweet_was_user_tweet = process_tweet(last_tweet_was_user_tweet,
@@ -537,7 +589,7 @@ def get_twitter_gos(cmd_line_args):
                                                               cached,
                                                               tweet_ids_from_csv)
                 else:
-                    # set flag for debugging output below
+                    # set flag for debugging output below, can happen when we break out from one of the loops above
                     already_seen = True
                     print "[ALREADY SEEN THIS ID] %s" % str(tweet_id)
                     break
@@ -546,8 +598,15 @@ def get_twitter_gos(cmd_line_args):
                 # next tweet to the previous one in the thread
                 tweet_id = tw.in_reply_to_status_id
 
-            # add a row to the data structure we'll write to a CSV file
-            add_csv_row(already_seen, csv_data, excel_data, support_tweets)
+                # store the current tweet id so we can check if we're in the middle of processing a thread when
+                # we get a '34' (page not found) error from the API. If so, we'll chuck the whole thread so we don't
+                # end up with negative GoS values
+                parent_id = tw.id
+
+            # add a row to the data structure we'll write to a CSV file; however, a '34' error ('not found') could
+            # end the thread - have to check if we have any support tweets first
+            if support_tweets:
+                add_csv_row(already_seen, csv_data, excel_data, support_tweets)
 
             # clean up
             del support_tweets
@@ -557,17 +616,19 @@ def get_twitter_gos(cmd_line_args):
         write_cached_tweets(tweets_to_cache)
         return
 
-    write_unanswered_tweets(tweet_ids_from_csv['user'], tweets_to_cache, excel_data)
+    # there may not be user tweets if we have a single tweet ID as a command line argument...
+    if tweet_ids_from_csv.has_key('user'):
+        write_unanswered_tweets(tweet_ids_from_csv['user'], tweets_to_cache, tweets_not_found, excel_data)
 
     # write out tweets to cache
-    write_cached_tweets(tweets_to_cache)
+    write_cached_tweets(tweets_to_cache, tweets_not_found)
 
     write_output_csv(csv_data["first"], csv_first_file, csv_headers)
     write_output_csv(csv_data["support"], csv_support_file, csv_headers)
 
     write_to_excel(excel_data, cmd_line_args.output)
 
-    #if len(tweets_to_cache):
+    # if len(tweets_to_cache):
     #    with open(tweets_file, 'wb') as fp:
     #        json.dump(tweets_to_cache.values(), fp)
 
@@ -580,7 +641,7 @@ def time_between_tweets_in_hours(tw1, tw2):
 
 
 if __name__ == '__main__':
-    #-i 1_1416582603663159.csv -o TwitterData_11_21.xlsx
+    # -i 1_1416582603663159.csv -o TwitterData_11_21.xlsx
     parser = argparse.ArgumentParser(description="Creates csv containing Gauge of Service data for tweets",
                                      version='%(prog)s 1.0')
     parser.add_argument("-id", "--status_id", type=int, help="Tweet ID")
