@@ -14,6 +14,7 @@ except mdb.MySQLError, e:
     print "Error: {:d}{}".format(e.args[0], e.args[1])
     exit(e.args[0])
 
+
 def query_decorator(func):
     def query_wrapper(name):
         try:
@@ -21,7 +22,9 @@ def query_decorator(func):
         except mdb.MySQLError, e:
             print "Error: {:d}{}".format(e.args[0], e.args[1])
             exit(e.args[0])
+
     return query_wrapper
+
 
 @query_decorator
 def get_tweet_by_id(id):
@@ -29,17 +32,51 @@ def get_tweet_by_id(id):
     cur = cxn.cursor()
     # TODO: sanitize this?
     q = "SELECT * from twposts WHERE tweetID = %s"
-    cur.execute(q, (id,)) # has to be a tuple, thus the ending comma
+    cur.execute(q, (id,))  # has to be a tuple, thus the ending comma
     result = cur.fetchone()
     return result
 
-@query_decorator
-def save_tweet(tweet):
-    pass
 
 @query_decorator
+def save_tweet(tweet):
+    global cxn
+
+    with cxn:
+        cur = cxn.cursor()
+        # odd - the format string here is NOT REALLY A NORMAL FORMAT STRING. YOU MUST USE %s for
+        # all fields.
+        # See http://stackoverflow.com/questions/5785154/python-mysqldb-issues-typeerror-d-format-a-number-is-required-not-str
+        q = "INSERT IGNORE INTO twposts(id, user_id, post_date, post_text, retweets, favorites, in_reply_to_id) " \
+            "VALUES (%s, %s, %s, %s, %s, %s, %s)"
+        arg_tuple = (long(tweet['id']),
+                     long(tweet['user_id']),
+                     _convert_time_from_twitter_to_mysql(tweet['post_date']),
+                     tweet['post_text'],
+                     int(tweet['retweets']),
+                     int(tweet['favorites']),
+                     long(tweet['in_reply_to_id']) if tweet['in_reply_to_id'] else 'NULL')
+        cur.execute(q, arg_tuple)
+
+
 def save_tweets(tweets):
-    pass
+    for tw in tweets:
+        save_tweet(tw)
+
+@query_decorator
+def save_404_tweet(tweet):
+    global cxn
+
+    with cxn:
+        cur = cxn.cursor()
+        q = "INSERT IGNORE INTO tw404posts(id) VALUES (%s)"
+        cur.execute(q, (tweet['id'],))
+
+def save_404_tweets(tweets):
+    for tw in tweets:
+        save_404_tweet(tw)
+
+
+
 
 @query_decorator
 def save_user(twitter_user):
@@ -59,6 +96,7 @@ def save_user(twitter_user):
                      twitter_user['location'],
                      twitter_user['time_zone'])
         cur.execute(q, arg_tuple)
+
 
 @query_decorator
 def save_gos_interaction(gos_dict):
@@ -83,9 +121,11 @@ def save_gos_interaction(gos_dict):
                      gos_dict['GOSType'])
         cur.execute(q, arg_tuple)
 
+
 def _convert_time_from_twitter_to_mysql(str_twitter_date):
     dt = datetime.strptime(str_twitter_date, TWITTER.TWITTER_TIME_FORMAT)
     return datetime.strftime(dt, DB.DB_TIME_FORMAT)
+
 
 if __name__ == '__main__':
     json_user = r"""{
@@ -127,5 +167,6 @@ if __name__ == '__main__':
    "favorite_count":1
 }"""
     import json
+
     tweet = json.loads(json_user)
     save_user(tweet['user'])
