@@ -3,6 +3,7 @@
 __author__ = 'cappy'
 
 import datetime
+from time import sleep
 from dateutil.parser import parse
 import excelwriter
 from re import search, IGNORECASE
@@ -305,8 +306,10 @@ def process_tweet(last_tweet_was_user_tweet, saved_tweets, tw, cached, tweets_fr
 def write_cached_tweets(cached_tweets, tweets_not_found):
     with open(tweets_file, "wb ") as fp:
         json.dump(cached_tweets.values(), fp)
+    #db.save_tweets(cached_tweets)
     with open(dead_tweets_file, "wb") as fp:
         json.dump(tweets_not_found, fp)
+    #db.save_404_tweets(tweets_not_found)
 
 
 def cache_tweet(cached_tweets, tw):
@@ -355,17 +358,20 @@ def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, tweets_not_found, e
                     pprint(te)
                     # you'll occasionally get 404's etc as users delete tweets
                     if 88 == code or 130 == code:
-                        print "%s... TRY AGAIN IN 15 MINUTES" % te.args[0][0]["message"]
+                        print "%s... SCRIPT WILL NOW SLEEP FOR 15:30..." % te.args[0][0]["message"]
                         rls = api.GetRateLimitStatus()
                         print "RATE LIMIT WILL RENEW AT {}".format(
                             datetime.datetime.fromtimestamp(
                                 rls["resources"]["statuses"]["/statuses/lookup"]["reset"]
                             ).strftime("%I:%M:%S %p")
                         )
-                        raise TwitterUnrecoverableException
-                    if 34 == code:
+                        do_api_sleep()
+                        #sleep(TWITTER.TWITTER_RATE_LIMIT_DELAY_IN_SECONDS)
+                        #raise TwitterUnrecoverableException
+                    if 34 == code or 179 == code:
                         # tweet not found - either the original user deleted it or twitter is not
-                        # providing it via the API.
+                        # providing it via the API. Status code 179 means we're unauthorized to view the tweet via API,
+                        # handle the same way
                         print "TWEET {} NOT FOUND - REMOVING FROM FUTURE RUNS".format(tweet_id)
                         tweets_not_found.append(tweet_id)  # save the tweet in our cache of '34' tweets
                     continue
@@ -534,6 +540,9 @@ def get_twitter_gos(cmd_line_args):
                     # for debugging output
                     cached = False
 
+                    # TODO: implement this
+                    # tw = db.get_tweet_by_id(tweet_id)
+
                     # check to see if we have a fully-reconstituted Status object from the cache. If so,
                     # use it instead of hitting the API
                     # TODO: This should be a DB call
@@ -570,17 +579,21 @@ def get_twitter_gos(cmd_line_args):
                             pprint(te)
                             # you'll occasionally get 404's etc as users delete tweets
                             if 88 == code or 130 == code:
-                                print "%s... TRY AGAIN IN 15 MINUTES" % te.args[0][0]["message"]
+                                print "%s... SCRIPT WILL NOW SLEEP FOR 15:30" % te.args[0][0]["message"]
                                 rls = api.GetRateLimitStatus()
                                 print "RATE LIMIT WILL RENEW AT {}".format(
                                     datetime.datetime.fromtimestamp(
                                         rls["resources"]["statuses"]["/statuses/lookup"]["reset"]
                                     ).strftime("%I:%M:%S %p")
                                 )
-                                raise TwitterUnrecoverableException  # break out of inner loop
-                            if 34 == code:
+
+                                # wait for the amount of time the rate limiter suggests before continuing
+                                do_api_sleep()
+                                #raise TwitterUnrecoverableException  # break out of inner loop
+                            if 34 == code or 179 == code:
                                 # tweet not found - either the original user deleted it or twitter is not
-                                # providing it via the API.
+                                # providing it via the API. status code 179 means we're not authorized to view
+                                # that tweet, same diff
                                 tweets_not_found.append(tweet_id)  # save the tweet in our cache of '34' tweets
 
                                 if parent_id:
@@ -625,7 +638,6 @@ def get_twitter_gos(cmd_line_args):
     # twitter threw exception we can't recover from, write out what we can
     except TwitterUnrecoverableException:
         write_cached_tweets(tweets_to_cache)
-        return
 
     # there may not be user tweets if we have a single tweet ID as a command line argument...
     if tweet_ids_from_csv.has_key('user'):
@@ -645,6 +657,17 @@ def time_between_tweets_in_hours(tw1, tw2):
     tweet2_time = parse(tw2.created_at)
     diff = tweet2_time - tweet1_time
     return "{:0.1f}".format(diff.total_seconds() / 60 / 60)
+
+def do_api_sleep():
+    msg = "\nENTERING API RATE LIMIT SLEEP PHASE!\n"
+    print "{:*^120}".format(msg)
+    number_of_seconds_between_heartbeats = 5
+    ui_heartbeat_intervals = TWITTER.TWITTER_RATE_LIMIT_DELAY_IN_SECONDS / number_of_seconds_between_heartbeats
+
+    for i in xrange(ui_heartbeat_intervals):
+        pct = float(number_of_seconds_between_heartbeats * i)/TWITTER.TWITTER_RATE_LIMIT_DELAY_IN_SECONDS
+        print "{:.1%} time elapsed till next API window waiting...".format(pct)
+        sleep(number_of_seconds_between_heartbeats)
 
 
 if __name__ == '__main__':
