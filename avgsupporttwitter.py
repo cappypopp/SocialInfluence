@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-__author__ = 'cappy'
+__author__ = 'cappypopp'
 
 import datetime
 from time import sleep
