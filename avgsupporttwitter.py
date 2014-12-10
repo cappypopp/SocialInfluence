@@ -14,8 +14,8 @@ from errno import EEXIST
 import json
 import twitter
 import csv
-from csvdict import DictUnicodeWriter
-from tlinsights.constants import DB, TWITTER
+from csvdict import csvdict
+from tlinsights.constants import TWITTER
 from tlinsights import db
 
 
@@ -23,6 +23,7 @@ def make_sure_path_exists(path):
     """ checks to see if path exists and creates it if it does not.
 
     Handles race condition present if the path is created between the os.pathexists() and os.makedirs() calls
+    :param path:
     """
     try:
         os.makedirs(path)
@@ -37,7 +38,7 @@ def get_url(self):
 
 
 def pretty_tweet(self, allow_non_ascii=False):
-    '''A JSON string representation of this twitter.Status instance.
+    """A JSON string representation of this twitter.Status instance.
 
     To output non-ascii, set keyword allow_non_ascii=True.
 
@@ -45,12 +46,17 @@ def pretty_tweet(self, allow_non_ascii=False):
     :param allow_non_ascii:
     Returns:
       A JSON string representation of this twitter.Status instance
-   '''
+   """
     return twitter.simplejson.dumps(self.AsDict(), sort_keys=True, indent=2,
                                     ensure_ascii=not allow_non_ascii)
 
 
 def GetTweetDetail(self):
+    """
+
+    :param self:
+    :return:
+    """
     s = "%s [%s]" % (self.text, self.GetTweetTimeForExcel())
     return s
 
@@ -306,10 +312,10 @@ def process_tweet(last_tweet_was_user_tweet, saved_tweets, tw, cached, tweets_fr
 def write_cached_tweets(cached_tweets, tweets_not_found):
     with open(tweets_file, "wb ") as fp:
         json.dump(cached_tweets.values(), fp)
-    #db.save_tweets(cached_tweets)
+    # db.save_tweets(cached_tweets)
     with open(dead_tweets_file, "wb") as fp:
         json.dump(tweets_not_found, fp)
-    #db.save_404_tweets(tweets_not_found)
+        # db.save_404_tweets(tweets_not_found)
 
 
 def cache_tweet(cached_tweets, tw):
@@ -366,8 +372,8 @@ def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, tweets_not_found, e
                             ).strftime("%I:%M:%S %p")
                         )
                         do_api_sleep()
-                        #sleep(TWITTER.TWITTER_RATE_LIMIT_DELAY_IN_SECONDS)
-                        #raise TwitterUnrecoverableException
+                        # sleep(TWITTER.TWITTER_RATE_LIMIT_DELAY_IN_SECONDS)
+                        # raise TwitterUnrecoverableException
                     if 34 == code or 179 == code:
                         # tweet not found - either the original user deleted it or twitter is not
                         # providing it via the API. Status code 179 means we're unauthorized to view the tweet via API,
@@ -401,7 +407,7 @@ def write_output_csv(csv_data, csv_file, csv_headers):
         # write our data to the CSV file
         with open(csv_file, 'wb') as fou:
             fou.write(u'\ufeff'.encode('utf8'))  # need this line to make Excel treat CSV as Unicode
-            dw = DictUnicodeWriter(fou, fieldnames=csv_headers)
+            dw = csvdict.DictUnicodeWriter(fou, fieldnames=csv_headers)
             dw.writeheader()
             for result_row in csv_data:
                 dw.writerow(result_row)
@@ -554,7 +560,7 @@ def get_twitter_gos(cmd_line_args):
                         # if this tweet is one of the ones that twitter returns a status 34 for (not found) then just
                         # skip it - not worth wasting a valuable rate-limited API call on it again
                         print "[DEAD TWEET DETECTED {} - REMOVING THREAD]".format(tweet_id)
-                        tweet_id = None # to break the loop on the next iteration
+                        tweet_id = None  # to break the loop on the next iteration
                         continue
                     else:
                         try:
@@ -589,7 +595,7 @@ def get_twitter_gos(cmd_line_args):
 
                                 # wait for the amount of time the rate limiter suggests before continuing
                                 do_api_sleep()
-                                #raise TwitterUnrecoverableException  # break out of inner loop
+                                # raise TwitterUnrecoverableException  # break out of inner loop
                             if 34 == code or 179 == code:
                                 # tweet not found - either the original user deleted it or twitter is not
                                 # providing it via the API. status code 179 means we're not authorized to view
@@ -658,6 +664,7 @@ def time_between_tweets_in_hours(tw1, tw2):
     diff = tweet2_time - tweet1_time
     return "{:0.1f}".format(diff.total_seconds() / 60 / 60)
 
+
 def do_api_sleep():
     msg = "\nENTERING API RATE LIMIT SLEEP PHASE!\n"
     print "{:*^120}".format(msg)
@@ -665,7 +672,7 @@ def do_api_sleep():
     ui_heartbeat_intervals = TWITTER.TWITTER_RATE_LIMIT_DELAY_IN_SECONDS / number_of_seconds_between_heartbeats
 
     for i in xrange(ui_heartbeat_intervals):
-        pct = float(number_of_seconds_between_heartbeats * i)/TWITTER.TWITTER_RATE_LIMIT_DELAY_IN_SECONDS
+        pct = float(number_of_seconds_between_heartbeats * i) / TWITTER.TWITTER_RATE_LIMIT_DELAY_IN_SECONDS
         print "{:.1%} time elapsed till next API window waiting...".format(pct)
         sleep(number_of_seconds_between_heartbeats)
 
