@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-__author__ = 'cappy'
+__author__ = 'cappypopp'
 
 import datetime
 from time import sleep
@@ -14,8 +14,8 @@ from errno import EEXIST
 import json
 import twitter
 import csv
-from csvdict import DictUnicodeWriter
-from tlinsights.constants import DB, TWITTER
+from csvdict import csvdict
+from tlinsights.constants import TWITTER
 from tlinsights import db
 
 
@@ -23,6 +23,7 @@ def make_sure_path_exists(path):
     """ checks to see if path exists and creates it if it does not.
 
     Handles race condition present if the path is created between the os.pathexists() and os.makedirs() calls
+    :param path:
     """
     try:
         os.makedirs(path)
@@ -37,7 +38,7 @@ def get_url(self):
 
 
 def pretty_tweet(self, allow_non_ascii=False):
-    '''A JSON string representation of this twitter.Status instance.
+    """A JSON string representation of this twitter.Status instance.
 
     To output non-ascii, set keyword allow_non_ascii=True.
 
@@ -45,12 +46,17 @@ def pretty_tweet(self, allow_non_ascii=False):
     :param allow_non_ascii:
     Returns:
       A JSON string representation of this twitter.Status instance
-   '''
+   """
     return twitter.simplejson.dumps(self.AsDict(), sort_keys=True, indent=2,
                                     ensure_ascii=not allow_non_ascii)
 
 
 def GetTweetDetail(self):
+    """
+
+    :param self:
+    :return:
+    """
     s = "%s [%s]" % (self.text, self.GetTweetTimeForExcel())
     return s
 
@@ -318,10 +324,10 @@ def process_tweet(last_tweet_was_user_tweet, saved_tweets, tw, cached, tweets_fr
 def write_cached_tweets(cached_tweets, tweets_not_found):
     with open(tweets_file, "wb ") as fp:
         json.dump(cached_tweets.values(), fp)
-    #db.save_tweets(cached_tweets)
+    # db.save_tweets(cached_tweets)
     with open(dead_tweets_file, "wb") as fp:
         json.dump(tweets_not_found, fp)
-    #db.save_404_tweets(tweets_not_found)
+        # db.save_404_tweets(tweets_not_found)
 
 
 def cache_tweet(cached_tweets, tw):
@@ -477,7 +483,7 @@ def write_output_csv(csv_data, csv_file, csv_headers):
         # write our data to the CSV file
         with open(csv_file, 'wb') as fou:
             fou.write(u'\ufeff'.encode('utf8'))  # need this line to make Excel treat CSV as Unicode
-            dw = DictUnicodeWriter(fou, fieldnames=csv_headers)
+            dw = csvdict.DictUnicodeWriter(fou, fieldnames=csv_headers)
             dw.writeheader()
             for result_row in csv_data:
                 dw.writerow(result_row)
@@ -586,9 +592,6 @@ def get_twitter_gos(cmd_line_args):
     # Note we can't use a set here because they are not serializable to JSON by default
     cached_tweets, tweets_to_cache, tweets_not_found = load_tweets_from_json()
 
-    # generator to handle giving us keys for Twitter API until exhausted; gets around rate limiting a bit
-    twitter_keys = TWITTER.get_twitter_keys()
-
     try:
         #TODO: genericize this - targeted at AVG only
         for tweet in tweet_ids_from_csv['avg']:
@@ -635,7 +638,7 @@ def get_twitter_gos(cmd_line_args):
                         # if this tweet is one of the ones that twitter returns a status 34 for (not found) then just
                         # skip it - not worth wasting a valuable rate-limited API call on it again
                         print "[DEAD TWEET DETECTED {} - REMOVING THREAD]".format(tweet_id)
-                        tweet_id = None # to break the loop on the next iteration
+                        tweet_id = None  # to break the loop on the next iteration
                         continue
                     else:
                         try:
@@ -696,6 +699,7 @@ def time_between_tweets_in_hours(tw1, tw2):
     tweet2_time = parse(tw2.created_at)
     diff = tweet2_time - tweet1_time
     return "{:0.1f}".format(diff.total_seconds() / 60 / 60)
+
 
 def do_api_sleep():
     msg = "\nENTERING API RATE LIMIT SLEEP PHASE!\n"
