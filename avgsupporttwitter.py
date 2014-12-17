@@ -76,6 +76,9 @@ twitter.Status.GetTweetTimeForExcel = GetTweetTimeForExcel
 class TwitterUnrecoverableException(Exception):
     pass
 
+class TwitterContinueProcessing(Exception):
+    pass
+
 # column headers for our output csv file and for
 # csv_row dictionary
 
@@ -95,6 +98,9 @@ tweets_file = "%s/tweets.json" % twitter_data_dir
 dead_tweets_file = "{}/dead_tweets.json".format(twitter_data_dir)
 
 
+twitter_keys = TWITTER.get_twitter_keys()
+
+
 def excel_date(datestring):
     temp = datetime.datetime(1899, 12, 30)
     date1 = datetime.datetime.strptime(datestring, "%m/%d/%Y %I:%M:%S %p")
@@ -112,7 +118,7 @@ def load_tweets_from_csv(filename):
             for index, row in enumerate(reader):
                 # skip the header row and any retweets since we don't care about them,
                 # also filter by author == AVGFree
-                if index != 0 and 'RT @' not in row['CONTENT']:
+                if index != 0: #and 'RT @' not in row['CONTENT']:
                     tweet_id = int(row['ARTICLE_URL'].rsplit("/", 1)[1])
                     if ("AVGFREE" == row['AUTHOR'] or "AVGSUPPORT" == row['AUTHOR']):
                         tweets['avg'].append(tweet_id)
@@ -123,7 +129,12 @@ def load_tweets_from_csv(filename):
     else:
         print "%s - FILE NOT FOUND" % csv_file
 
-    pprint(tweets)
+    print("{p:*^32}\n{avg:d} AVG tweets loaded from {f}\n{user:d} user tweets loaded from {f}\n{p:*^32}".format(
+        p="",
+        avg=len(tweets['avg']),
+        user=len(tweets['user']),
+        f=csv_file
+    ))
     return tweets
 
 
@@ -168,7 +179,7 @@ def load_tweets_from_json():
     else:
         print "%s - FILE NOT FOUND" % dead_tweets_file
 
-    print("{} tweet loaded from cache".format(len(rehydrated_tweets)))
+    print("{p:*^33}\n{:d} tweets loaded from cache\n{p:*^33}".format(len(rehydrated_tweets), p=''))
 
     return rehydrated_tweets, tweets_to_cache, dead_tweets
 
@@ -267,6 +278,7 @@ def process_tweet(last_tweet_was_user_tweet, saved_tweets, tw, cached, tweets_fr
     :param tw: the raw tweet from the API or cache
     :return: last_tweet_was_user_tweet [True|False]
     """
+    # TODO: this should be moved to a strategy or something like it - we need to be able to set different rules/algos
 
     # debugging aid
     c = 'C' if cached else 'N'
@@ -333,68 +345,132 @@ def cache_tweet(cached_tweets, tw):
         s = tw.AsDict()
         cached_tweets[tw.GetId()] = s
 
-    return cached_tweets
+def handle_twitter_rate_limit(api, message):
+    print ("{}... SCRIPT WILL NOW SLEEP FOR 15 min...".format(message))
+    rls = api.GetRateLimitStatus()
+    print ("RATE LIMIT WILL RENEW AT {}".format(
+        datetime.datetime.fromtimestamp(
+            rls["resources"]["statuses"]["/statuses/lookup"]["reset"]
+        ).strftime("%I:%M:%S %p"))
+    )
+    # sleep for 15 min until API comes back or Twitter isn't over capacity
+    do_api_sleep()
 
 
-def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, tweets_not_found, excel_data):
+def get_twitter_status_from_api(tweet_id, parent_id, tweets_to_cache, tweets_processed, tweets_not_found_or_private):
     try:
+        global api  # Python scope: any global assigned locally is overwritten and becomes local
+        global twitter_keys
+        if not api:
+            try:
+                print("{p:*^32}\nFETCHING NEXT SET OF KEYS!\n{p:*^32}".format(p=''))
+                # fetch the next set of keys from the generator
+                keys = twitter_keys.next()
 
+            except StopIteration:
+
+                print("{p:*^32}\nOUT OF API KEYS -- SLEEPING!\n{p:*^32}".format(p=''))
+                # we've reached the end of our collection of keys so we
+                # reset our generator to re-use it from the beginning
+                twitter_keys = TWITTER.get_twitter_keys()
+
+                # fetch next set of keys for when we wake up
+                keys = twitter_keys.next()
+
+                # we've exhausted our keys, sleep is only option
+                do_api_sleep()
+
+            api = twitter.Api(consumer_key=keys["consumer_key"],
+                              consumer_secret=keys["consumer_secret"],
+                              access_token_key=keys["access_key"],
+                              access_token_secret=keys["access_secret"])
+
+        # get the next tweet via Twitter API,
+        # remove all entities (pics, vids, etc.)
+        tw = api.GetStatus(tweet_id, include_entities=False)
+
+        # TODO: save tweet in DB or in cache to bulk-save at end
+        # store the tweet in the cache so we won't have to look it up again
+        cache_tweet(tweets_to_cache, tw)
+
+        return tw
+
+    except twitter.TwitterError as te:
+
+        code = te.args[0][0]["code"]
+        pprint(te)
+        if TWITTER.TWITTER_ERR_RATE_LIMIT_EXCEEDED == code:
+            # wipe out the existing API connection, we'll use a new one with a different set of
+            # keys if possible on the next iteration
+            api = None
+
+            # remove the tweet we added to the already-seen cache so if we can handle and continue
+            # from the exception we won't miss it
+            tweets_processed.remove(tweet_id)
+
+        if TWITTER.TWITTER_ERR_TWITTER_OVER_CAPACITY == code:
+            """
+            saving this because may use elsewhere
+            print "%s... SCRIPT WILL NOW SLEEP FOR 15:30" % te.args[0][0]["message"]
+            rls = api.GetRateLimitStatus()
+            print "RATE LIMIT WILL RENEW AT {}".format(
+                datetime.datetime.fromtimestamp(
+                    rls["resources"]["statuses"]["/statuses/lookup"]["reset"]
+                ).strftime("%I:%M:%S %p")
+            )
+            """
+
+            # wait for the amount of time the rate limiter suggests before continuing
+            do_api_sleep()
+
+        if TWITTER.TWITTER_ERR_TWEET_NOT_FOUND == code or \
+                        TWITTER.TWITTER_ERR_USER_PROTECTED_TWEETS == code:
+            # tweet not found - either the original user deleted it or twitter is not
+            # providing it via the API. status code 179 means we're not authorized to view
+            # that tweet, same diff
+            tweets_not_found_or_private.append(tweet_id)  # save the tweet in our cache of unreachable tweets
+
+            if parent_id:
+                # we are in the middle of conversation thread - clear the support tweets
+                # and move on with the next conversation. Also cache the tweet ID so we can track
+                # these and ignore in the future
+                support_tweets = None
+                print("[DEAD THREAD - REMOVING]")
+
+                # TODO: where do we go from here?
+
+        raise TwitterContinueProcessing("handled Twitter exception - continue processing")
+
+def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, tweets_processed, tweets_not_found, excel_data):
+
+    try:
         for tweet_id in user_tweet_ids:
-            # only hit the API if we need to
-            if tweet_id in tweets_not_found:
-                print "[TWEET NOT FOUND {} - SKIPPING]".format(tweet_id)
-                continue
-            if tweet_id not in tweets_to_cache.keys():
-                try:
-                    global api
-                    if not api:
-                        api = twitter.Api(consumer_key=TWITTER.TWITTER_CONSUMER_KEY,
-                                          consumer_secret=TWITTER.TWITTER_CONSUMER_SECRET,
-                                          access_token_key=TWITTER.TWITTER_ACCESS_KEY,
-                                          access_token_secret=TWITTER.TWITTER_ACCESS_SECRET)
-
-                    tweet = api.GetStatus(tweet_id, include_entities=False)
-
-                    # store the tweet in the cache so we won't have to look it up again
-                    tweets_to_cache = cache_tweet(tweets_to_cache, tweet)
-
-                    tw = tweet.AsDict()
-                except twitter.TwitterError as te:
-                    code = te.args[0][0]["code"]
-                    pprint(te)
-                    # you'll occasionally get 404's etc as users delete tweets
-                    if 88 == code or 130 == code:
-                        print "%s... SCRIPT WILL NOW SLEEP FOR 15:30..." % te.args[0][0]["message"]
-                        rls = api.GetRateLimitStatus()
-                        print "RATE LIMIT WILL RENEW AT {}".format(
-                            datetime.datetime.fromtimestamp(
-                                rls["resources"]["statuses"]["/statuses/lookup"]["reset"]
-                            ).strftime("%I:%M:%S %p")
-                        )
-                        do_api_sleep()
-                        # sleep(TWITTER.TWITTER_RATE_LIMIT_DELAY_IN_SECONDS)
-                        # raise TwitterUnrecoverableException
-                    if 34 == code or 179 == code:
-                        # tweet not found - either the original user deleted it or twitter is not
-                        # providing it via the API. Status code 179 means we're unauthorized to view the tweet via API,
-                        # handle the same way
-                        print "TWEET {} NOT FOUND - REMOVING FROM FUTURE RUNS".format(tweet_id)
-                        tweets_not_found.append(tweet_id)  # save the tweet in our cache of '34' tweets
+            if tweet_id not in tweets_processed:
+                tweets_processed.add(tweet_id)
+                if tweet_id in tweets_not_found:
+                    print "[USER TWEET NOT FOUND VIA TWITTER API: {} - SKIPPING]".format(tweet_id)
                     continue
-            else:
-                # can this ever happen? Can we have a tweet in the cache that is unreplied to? I don't think so
-                print "This tweet was in cache but unanswered: {}".format(tweet_id)
-                tw = tweets_to_cache[tweet_id]
+                elif tweet_id not in tweets_to_cache.keys():  # only hit the API if we need to
+                    try:
+                        tw = get_twitter_status_from_api(tweet_id, None, tweets_to_cache, tweets_processed, tweets_not_found)
+                        tw = tw.AsDict()
+                    except TwitterContinueProcessing as e:
+                        tw = None
+                        continue
+                else:
+                    # can this ever happen? Can we have a tweet in the cache that is unreplied to? I don't think so
+                    print "This tweet was in cache but unanswered: {}".format(tweet_id)
+                    tw = tweets_to_cache[tweet_id]
 
-            row = []
-            row.append(tw["id"])
-            row.append("http://twitter.com/{}/status/{}".format(tw["user"]["id"], tw['id']))
-            row.append(parse(tw["created_at"]).strftime(TWITTER.TWITTER_TIME_FORMAT))
-            row.append(tw["text"])
+                row = [tw['id'],
+                       "http://twitter.com/{}/status/{}".format(tw['user']['id'],
+                                                                tw['id']),
+                       parse(tw['created_at']).strftime(TWITTER.TWITTER_TIME_FORMAT),
+                       tw['text']]
 
-            pprint(row)
+                pprint(row)
 
-            excel_data['TW-Unanswered'].append(row)
+                excel_data['TW-Unanswered'].append(row)
 
             # twitter threw exception we can't recover from, write out what we can
     except TwitterUnrecoverableException:
@@ -517,6 +593,7 @@ def get_twitter_gos(cmd_line_args):
     cached_tweets, tweets_to_cache, tweets_not_found = load_tweets_from_json()
 
     try:
+        #TODO: genericize this - targeted at AVG only
         for tweet in tweet_ids_from_csv['avg']:
 
             # data structure to hold the latest tweets in our
@@ -541,17 +618,18 @@ def get_twitter_gos(cmd_line_args):
                 # from Radian6 import is also a tweet we get back from the API
                 if tweet_id not in processed:
 
+                    tw = None
+
                     processed.add(tweet_id)  # store the tweet id in the set so we don't process it again
 
-                    # for debugging output
+                    # for debugging output - will be used in process_tweet for output
                     cached = False
 
-                    # TODO: implement this
+                    # TODO: implement this DB call
                     # tw = db.get_tweet_by_id(tweet_id)
 
                     # check to see if we have a fully-reconstituted Status object from the cache. If so,
                     # use it instead of hitting the API
-                    # TODO: This should be a DB call
                     if tweet_id in cached_tweets.keys():
                         tw = cached_tweets[tweet_id]
                         # again, debugging flag only
@@ -564,54 +642,11 @@ def get_twitter_gos(cmd_line_args):
                         continue
                     else:
                         try:
-                            global api  # Python scope rules: any global assigned locally is overwritten and becomes local
-                            if not api:
-                                api = twitter.Api(consumer_key=TWITTER.TWITTER_CONSUMER_KEY,
-                                                  consumer_secret=TWITTER.TWITTER_CONSUMER_SECRET,
-                                                  access_token_key=TWITTER.TWITTER_ACCESS_KEY,
-                                                  access_token_secret=TWITTER.TWITTER_ACCESS_SECRET)
-
-                            # get the next tweet via Twitter API,
-                            # remove all entities (pics, vids, etc.)
-                            tw = api.GetStatus(tweet_id, include_entities=False)
-
-                            # store the tweet in the cache so we won't have to look it up again
-                            tweets_to_cache = cache_tweet(tweets_to_cache, tw)
-
-                            # sleep(0.2) # play nice with the API to avoid rate limits
-
-                        except twitter.TwitterError as te:
-                            code = te.args[0][0]["code"]
-                            pprint(te)
-                            # you'll occasionally get 404's etc as users delete tweets
-                            if 88 == code or 130 == code:
-                                print "%s... SCRIPT WILL NOW SLEEP FOR 15:30" % te.args[0][0]["message"]
-                                rls = api.GetRateLimitStatus()
-                                print "RATE LIMIT WILL RENEW AT {}".format(
-                                    datetime.datetime.fromtimestamp(
-                                        rls["resources"]["statuses"]["/statuses/lookup"]["reset"]
-                                    ).strftime("%I:%M:%S %p")
-                                )
-
-                                # wait for the amount of time the rate limiter suggests before continuing
-                                do_api_sleep()
-                                # raise TwitterUnrecoverableException  # break out of inner loop
-                            if 34 == code or 179 == code:
-                                # tweet not found - either the original user deleted it or twitter is not
-                                # providing it via the API. status code 179 means we're not authorized to view
-                                # that tweet, same diff
-                                tweets_not_found.append(tweet_id)  # save the tweet in our cache of '34' tweets
-
-                                if parent_id:
-                                    # we are in the middle of conversation thread - clear the support tweets
-                                    # and move on with the next conversation. Also cache the tweet ID so we can track
-                                    # these and ignore in the future
-                                    support_tweets = None
-                                    print("[DEAD THREAD - REMOVING]")
-
-                                    # TODO: where do we go from here?
-
-                            continue  # resume next loop iteration and try again
+                            tw = get_twitter_status_from_api(tweet_id, parent_id, tweets_to_cache, processed,
+                                                             tweets_not_found)
+                        #  TODO: not clean, hides Twitter exceptions that I don't process
+                        except TwitterContinueProcessing as e:
+                            continue
 
                     last_tweet_was_user_tweet = process_tweet(last_tweet_was_user_tweet,
                                                               support_tweets,
@@ -641,21 +676,22 @@ def get_twitter_gos(cmd_line_args):
             # clean up
             del support_tweets
 
-    # twitter threw exception we can't recover from, write out what we can
-    except TwitterUnrecoverableException:
-        write_cached_tweets(tweets_to_cache)
+        # there may not be user tweets if we have a single tweet ID as a command line argument...
+        if tweet_ids_from_csv.has_key('user'):
+            write_unanswered_tweets(tweet_ids_from_csv['user'], tweets_to_cache, processed, tweets_not_found, excel_data)
 
-    # there may not be user tweets if we have a single tweet ID as a command line argument...
-    if tweet_ids_from_csv.has_key('user'):
-        write_unanswered_tweets(tweet_ids_from_csv['user'], tweets_to_cache, tweets_not_found, excel_data)
+        write_output_csv(csv_data["first"], csv_first_file, csv_headers)
+        write_output_csv(csv_data["support"], csv_support_file, csv_headers)
+
+        write_to_excel(excel_data, cmd_line_args.output)
+
+    # twitter threw exception we can't recover from, write out what we can
+    except Exception as e:
+        write_cached_tweets(tweets_to_cache)
+        return
 
     # write out tweets to cache
     write_cached_tweets(tweets_to_cache, tweets_not_found)
-
-    write_output_csv(csv_data["first"], csv_first_file, csv_headers)
-    write_output_csv(csv_data["support"], csv_support_file, csv_headers)
-
-    write_to_excel(excel_data, cmd_line_args.output)
 
 
 def time_between_tweets_in_hours(tw1, tw2):
@@ -672,8 +708,8 @@ def do_api_sleep():
     ui_heartbeat_intervals = TWITTER.TWITTER_RATE_LIMIT_DELAY_IN_SECONDS / number_of_seconds_between_heartbeats
 
     for i in xrange(ui_heartbeat_intervals):
-        pct = float(number_of_seconds_between_heartbeats * i) / TWITTER.TWITTER_RATE_LIMIT_DELAY_IN_SECONDS
-        print "{:.1%} time elapsed till next API window waiting...".format(pct)
+        pct = float(number_of_seconds_between_heartbeats * i)/TWITTER.TWITTER_RATE_LIMIT_DELAY_IN_SECONDS
+        print "{:.1%} time elapsed till next API window ...".format(pct)
         sleep(number_of_seconds_between_heartbeats)
 
 
