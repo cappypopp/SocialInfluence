@@ -14,6 +14,9 @@ from constants import DB, TWITTER
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+class TLInsightsException(Exception):
+    pass
+
 
 class TLInsightsDB(object):
 
@@ -26,19 +29,20 @@ class TLInsightsDB(object):
             logger.error("Error: {:d}{}".format(err.args[0], err.args[1]))
             exit(err.args[0])
 
-    def _query_decorator(func):
-        @wraps(func)
-        def query_wrapper(self, *args):
-            try:
-                func(self, *args)
-            except mdb.MySQLError as e:
-                logger.error("Error: {:d} {}".format(e.args[0], e.args[1]))
-                logger.debug(self.cur._last_executed)
-                exit(e.args[0])
+    def _query_tag_decorator(tags):  # used to pass args to decorator (decorator generator)
+        def _query_decorator(func):  # decorator
+            @wraps(func)  # to keep __doc__, __name__, and __module__ pointing to the original function
+            def decorated_query(self, *args):  # decorated function to return
+                try:
+                    func(self, *args)
+                except mdb.MySQLError as e:
+                    logger.error("Error: {:d} {}".format(e.args[0], e.args[1]))
+                    logger.debug(self.cur._last_executed)
+                    raise TLInsightsException(tags)
+            return decorated_query
+        return _query_decorator
 
-        return query_wrapper
-
-    @_query_decorator
+    @_query_tag_decorator("tweet not found")
     def get_tweet_by_id(self, tweet_id):
         with self.cxn:
             q = "SELECT * from twposts WHERE id = %s"
@@ -47,7 +51,7 @@ class TLInsightsDB(object):
         return result
 
 
-    @_query_decorator
+    @_query_tag_decorator("can't save tweet")
     def save_tweet(self, tweet):
 
         result = None
@@ -77,7 +81,7 @@ class TLInsightsDB(object):
                             %s,
                             %s,
                             %s,
-                            %s,
+                            #%s,
                             %s,
                             %s,
                             %s,
@@ -118,7 +122,7 @@ class TLInsightsDB(object):
         for tw in tweets:
             self.save_tweet(tw)
 
-    @_query_decorator
+    @_query_tag_decorator("can't save 404 tweet")
     def save_404_tweet(self,tweet):
 
         with self.cxn:
@@ -129,8 +133,7 @@ class TLInsightsDB(object):
         for tw in tweets:
             self.save_404_tweet(tw)
 
-
-    @_query_decorator
+    @_query_tag_decorator("can't save user")
     def save_user(self, twitter_user):
 
         with self.cxn:
@@ -212,7 +215,7 @@ class TLInsightsDB(object):
 
             return result
         
-    @_query_decorator
+    @_query_tag_decorator("can't save user")
     def save_user_from_dict(self, twitter_user):
 
         with self.cxn:
@@ -305,7 +308,7 @@ class TLInsightsDB(object):
     def _decode_if_string(cls, val):
         return val.decode("utf8") if isinstance(val, basestring) else val
 
-    @_query_decorator
+    @_query_tag_decorator("can't save gos")
     def save_gos_interaction(self, gos_dict):
 
         with self.cxn:
@@ -388,3 +391,4 @@ if __name__ == '__main__':
     tweet = Status.NewFromJsonDict(tweet_json)
     db = TLInsightsDB(DB.DB_TEST_NAME)
     db.save_tweet(tweet)
+    db.get_tweet_by_id(123)
