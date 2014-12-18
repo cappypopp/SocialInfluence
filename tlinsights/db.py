@@ -2,129 +2,345 @@
 __author__ = 'cappy'
 
 from sys import exit
-from constants import DB, TWITTER
 from datetime import datetime
-from twitter import Status, UserStatus
-
+from functools import wraps
+from twitter import Status
+import logging
 import MySQLdb as mdb
+import MySQLdb.cursors as cursors
 
-try:
-    cxn = mdb.connect(DB.DB_SERVER, DB.DB_USER, DB.DB_PASS, DB.DB_NAME, use_unicode=True, charset=DB.DB_CHARSET)
-except mdb.MySQLError, e:
-    print "Error: {:d}{}".format(e.args[0], e.args[1])
-    exit(e.args[0])
+from constants import DB, TWITTER
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
-def query_decorator(func):
-    def query_wrapper(name):
+class TLInsightsDB(object):
+
+    def __init__(self, db_name=DB.DB_NAME):
         try:
-            func(name)
-        except mdb.MySQLError, e:
-            print "Error: {:d}{}".format(e.args[0], e.args[1])
-            exit(e.args[0])
+            self.cxn = mdb.connect(DB.DB_SERVER, DB.DB_USER, DB.DB_PASS, db_name, use_unicode=True,
+                                   charset=DB.DB_CHARSET, cursorclass=cursors.DictCursor)
+            self.cur = self.cxn.cursor()
+        except mdb.MySQLError as err:
+            logger.error("Error: {:d}{}".format(err.args[0], err.args[1]))
+            exit(err.args[0])
 
-    return query_wrapper
+    def _query_decorator(func):
+        @wraps(func)
+        def query_wrapper(self, *args):
+            try:
+                func(self, *args)
+            except mdb.MySQLError as e:
+                logger.error("Error: {:d} {}".format(e.args[0], e.args[1]))
+                logger.debug(self.cur._last_executed)
+                exit(e.args[0])
 
+        return query_wrapper
 
-@query_decorator
-def get_tweet_by_id(id):
-    global cxn
-    cur = cxn.cursor()
-    # TODO: sanitize this?
-    q = "SELECT * from twposts WHERE tweetID = %s"
-    cur.execute(q, (id,))  # has to be a tuple, thus the ending comma
-    result = cur.fetchone()
-    return result
-
-
-@query_decorator
-def save_tweet(tweet):
-    global cxn
-
-    with cxn:
-        cur = cxn.cursor()
-        # odd - the format string here is NOT REALLY A NORMAL FORMAT STRING. YOU MUST USE %s for
-        # all fields.
-        # See http://stackoverflow.com/questions/5785154/python-mysqldb-issues-typeerror-d-format-a-number-is-required-not-str
-        q = "INSERT IGNORE INTO twposts(id, user_id, post_date, post_text, retweets, favorites, in_reply_to_id) " \
-            "VALUES (%s, %s, %s, %s, %s, %s, %s)"
-        arg_tuple = (long(tweet['id']),
-                     long(tweet['user_id']),
-                     _convert_time_from_twitter_to_mysql(tweet['post_date']),
-                     tweet['post_text'],
-                     int(tweet['retweets']),
-                     int(tweet['favorites']),
-                     long(tweet['in_reply_to_id']) if tweet['in_reply_to_id'] else 'NULL')
-        cur.execute(q, arg_tuple)
+    @_query_decorator
+    def get_tweet_by_id(self, tweet_id):
+        with self.cxn:
+            q = "SELECT * from twposts WHERE id = %s"
+            self.cur.execute(q, (tweet_id,))  # has to be a tuple, thus the ending comma
+            result = self.cur.fetchone()
+        return result
 
 
-def save_tweets(tweets):
-    for tw in tweets:
-        save_tweet(tw)
+    @_query_decorator
+    def save_tweet(self, tweet):
 
-@query_decorator
-def save_404_tweet(tweet):
-    global cxn
+        result = None
 
-    with cxn:
-        cur = cxn.cursor()
-        q = "INSERT IGNORE INTO tw404posts(id) VALUES (%s)"
-        cur.execute(q, (tweet['id'],))
+        self.save_user(tweet.GetUser())
 
-def save_404_tweets(tweets):
-    for tw in tweets:
-        save_404_tweet(tw)
+        q = """INSERT INTO twposts (id,
+                                    user_id,
+                                    created_at,
+                                    text,
+                                    retweeted,
+                                    retweet_count,
+                                    favorited,
+                                    favorite_count,
+                                    in_reply_to_status_id,
+                                    in_reply_to_user_id,
+                                    in_reply_to_screen_name,
+                                    lang,
+                                    truncated,
+                                    possibly_sensitive)
+                    VALUES (%s,
+                            %s,
+                            %s,
+                            %s,
+                            %s,
+                            %s,
+                            %s,
+                            %s,
+                            %s,
+                            %s,
+                            %s,
+                            %s,
+                            %s,
+                            %s)
+                    ON DUPLICATE KEY UPDATE
+                      text = VALUES(text),
+                      retweeted = VALUES(retweeted),
+                      retweet_count = VALUES(retweet_count),
+                      favorited = VALUES(favorited),
+                      favorite_count = VALUES(favorite_count),
+                      possibly_sensitive = VALUES(possibly_sensitive);
+                    """
+
+        with self.cxn:
+            arg_tuple = (
+                tweet.id,
+                tweet.user.id,
+                self._convert_time_from_twitter_to_mysql(tweet.created_at),
+                self._decode_if_string(tweet.text),
+                tweet.retweeted,
+                tweet.retweet_count,
+                tweet.favorited,
+                tweet.favorite_count,
+                tweet.in_reply_to_status_id,
+                tweet.in_reply_to_user_id,
+                tweet.in_reply_to_screen_name,
+                self._decode_if_string(tweet.lang),
+                tweet.truncated,
+                tweet.possibly_sensitive
+            )
+
+            result = self.cur.execute(q, arg_tuple)
+
+        return result
 
 
+    def save_tweets(self, tweets):
+        for tw in tweets:
+            self.save_tweet(tw)
+
+    @_query_decorator
+    def save_404_tweet(self,tweet):
+
+        with self.cxn:
+            q = "INSERT IGNORE INTO tw404posts(id) VALUES (%s)"
+            self.cur.execute(q, (tweet['id'],))
+
+    def save_404_tweets(self, tweets):
+        for tw in tweets:
+            self.save_404_tweet(tw)
 
 
-@query_decorator
-def save_user(twitter_user):
-    global cxn
+    @_query_decorator
+    def save_user(self, twitter_user):
 
-    with cxn:
-        cur = cxn.cursor()
-        # odd - the format string here is NOT REALLY A NORMAL FORMAT STRING. YOU MUST USE %s for
-        # all fields.
-        # See http://stackoverflow.com/questions/5785154/python-mysqldb-issues-typeerror-d-format-a-number-is-required-not-str
-        q = "INSERT IGNORE INTO twusers(id, name, screen_name, profile_url, location, time_zone) " \
-            "VALUES (%s, %s, %s, %s, %s, %s)"
-        arg_tuple = (long(twitter_user['id']),
-                     twitter_user['name'],
-                     twitter_user['screen_name'],
-                     twitter_user['url'],
-                     twitter_user['location'],
-                     twitter_user['time_zone'])
-        cur.execute(q, arg_tuple)
+        with self.cxn:
 
+            q = """INSERT INTO twusers (
+                                    id,
+                                    name,
+                                    created_at,
+                                    screen_name,
+                                    url,
+                                    description,
+                                    statuses_count,
+                                    favourites_count,
+                                    followers_count,
+                                    friends_count,
+                                    listed_count,
+                                    location,
+                                    time_zone,
+                                    lang,
+                                    protected,
+                                    verified,
+                                    geo_enabled
+                                   )
+                            VALUES (
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s)
+                            ON DUPLICATE KEY UPDATE
+                                    name = VALUES(name),
+                                    created_at = VALUES(created_at),
+                                    screen_name = VALUES(screen_name),
+                                    url = VALUES(url),
+                                    description = VALUES(description),
+                                    statuses_count = VALUES(statuses_count),
+                                    favourites_count = VALUES(favourites_count),
+                                    followers_count = VALUES(followers_count),
+                                    friends_count = VALUES(friends_count),
+                                    listed_count = VALUES(listed_count),
+                                    location = VALUES(location),
+                                    time_zone = VALUES(time_zone),
+                                    lang = VALUES(lang),
+                                    protected = VALUES(protected),
+                                    verified = VALUES(verified),
+                                    geo_enabled = VALUES(geo_enabled);"""
 
-@query_decorator
-def save_gos_interaction(gos_dict):
-    global cxn
+            arg_tuple = (twitter_user.id,
+                         self._decode_if_string(twitter_user.name),
+                         self._convert_time_from_twitter_to_mysql(twitter_user.created_at),
+                         self._decode_if_string(twitter_user.screen_name),
+                         twitter_user.url,
+                         self._decode_if_string(twitter_user.description),
+                         twitter_user.statuses_count,
+                         twitter_user.favourites_count,
+                         twitter_user.followers_count,
+                         twitter_user.friends_count,
+                         twitter_user.listed_count,
+                         self._decode_if_string(twitter_user.location),
+                         self._decode_if_string(twitter_user.time_zone),
+                         self._decode_if_string(twitter_user.lang),
+                         twitter_user.protected,
+                         twitter_user.verified,
+                         twitter_user.geo_enabled)
 
-    with cxn:
-        cur = cxn.cursor()
-        # odd - the format string here is NOT REALLY A NORMAL FORMAT STRING. YOU MUST USE %s for
-        # all fields.
-        # See http://stackoverflow.com/questions/5785154/python-mysqldb-issues-typeerror-d-format-a-number-is-required-not-str
-        q = "INSERT IGNORE INTO twgos(user_tweet_id, user_tweet_url, user_tweet_date, " \
-            "user_tweet_text, support_tweet_id, support_tweet_date, support_tweet_text, support_gos, gos_type) " \
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
-        arg_tuple = (long(gos_dict['PostId']),
-                     gos_dict['Post'],
-                     _convert_time_from_twitter_to_mysql(gos_dict['PostDate']),
-                     gos_dict['PostMessage'],
-                     long(gos_dict['ReplyPostId']),
-                     _convert_time_from_twitter_to_mysql(gos_dict['ReplyDate']),
-                     gos_dict['ReplyMessage'],
-                     gos_dict['GOS'],
-                     gos_dict['GOSType'])
-        cur.execute(q, arg_tuple)
+            result = self.cur.execute(q, arg_tuple)
 
+            return result
+        
+    @_query_decorator
+    def save_user_from_dict(self, twitter_user):
 
-def _convert_time_from_twitter_to_mysql(str_twitter_date):
-    dt = datetime.strptime(str_twitter_date, TWITTER.TWITTER_TIME_FORMAT)
-    return datetime.strftime(dt, DB.DB_TIME_FORMAT)
+        with self.cxn:
+
+            q = """INSERT INTO twusers (
+                                    id,
+                                    name,
+                                    created_at,
+                                    screen_name,
+                                    url,
+                                    description,
+                                    statuses_count,
+                                    favourites_count,
+                                    followers_count,
+                                    friends_count,
+                                    listed_count,
+                                    location,
+                                    time_zone,
+                                    lang,
+                                    protected,
+                                    verified,
+                                    geo_enabled
+                                   )
+                            VALUES (
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s,
+                                    %s)
+                            ON DUPLICATE KEY UPDATE
+                                    name = VALUES(name),
+                                    created_at = VALUES(created_at),
+                                    screen_name = VALUES(screen_name),
+                                    url = VALUES(url),
+                                    description = VALUES(description),
+                                    statuses_count = VALUES(statuses_count),
+                                    favourites_count = VALUES(favourites_count),
+                                    followers_count = VALUES(followers_count),
+                                    friends_count = VALUES(friends_count),
+                                    listed_count = VALUES(listed_count),
+                                    location = VALUES(location),
+                                    time_zone = VALUES(time_zone),
+                                    lang = VALUES(lang),
+                                    protected = VALUES(protected),
+                                    verified = VALUES(verified),
+                                    geo_enabled = VALUES(geo_enabled);"""
+
+            arg_tuple = (long(self._check_and_decode_val(twitter_user, 'id')),
+                         self._check_and_decode_val(twitter_user, 'name'),
+                         self._convert_time_from_twitter_to_mysql(
+                             self._check_and_decode_val(twitter_user, 'created_at')),
+                         self._check_and_decode_val(twitter_user, 'screen_name'),
+                         self._check_and_decode_val(twitter_user, 'url'),
+                         self._check_and_decode_val(twitter_user, 'description'),
+                         self._check_and_decode_val(twitter_user, 'statuses_count'),
+                         self._check_and_decode_val(twitter_user, 'favourites_count'),
+                         self._check_and_decode_val(twitter_user, 'followers_count'),
+                         self._check_and_decode_val(twitter_user, 'friends_count'),
+                         self._check_and_decode_val(twitter_user, 'listed_count'),
+                         self._check_and_decode_val(twitter_user, 'location'),
+                         self._check_and_decode_val(twitter_user, 'time_zone'),
+                         self._check_and_decode_val(twitter_user, 'lang'),
+                         self._check_and_decode_val(twitter_user, 'protected'),
+                         self._check_and_decode_val(twitter_user, 'verified'),
+                         self._check_and_decode_val(twitter_user, 'geo_enabled'))
+
+            result = self.cur.execute(q, arg_tuple)
+
+            return result
+
+    @classmethod
+    def _check_and_decode_val(cls, d, k):
+        v = d.get(k, None)
+        result = cls._decode_if_string(v)
+        return result
+
+    @classmethod
+    def _decode_if_string(cls, val):
+        return val.decode("utf8") if isinstance(val, basestring) else val
+
+    @_query_decorator
+    def save_gos_interaction(self, gos_dict):
+
+        with self.cxn:
+            # odd - the format string here is NOT REALLY A NORMAL FORMAT STRING. YOU MUST USE %s for
+            # all fields.
+            # See http://stackoverflow.com/questions/5785154/python-mysqldb-issues-typeerror-d-format-a-number-is-required-not-str
+            q = """INSERT IGNORE INTO twgos(user_tweet_id,
+                                            user_tweet_url,
+                                            user_tweet_date,
+                                            user_tweet_text,
+                                            support_tweet_id,
+                                            support_tweet_date,
+                                            support_tweet_text,
+                                            support_gos,
+                                            gos_type)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   ON DUPLICATE KEY UPDATE ( support_gos = VALUES(support_gos));"""
+            arg_tuple = (long(gos_dict['PostId']),
+                         gos_dict['Post'],
+                         self._convert_time_from_twitter_to_mysql(gos_dict['PostDate']),
+                         gos_dict['PostMessage'],
+                         long(gos_dict['ReplyPostId']),
+                         self._convert_time_from_twitter_to_mysql(gos_dict['ReplyDate']),
+                         gos_dict['ReplyMessage'],
+                         gos_dict['GOS'],
+                         gos_dict['GOSType'])
+            result = self.cur.execute(q, arg_tuple)
+            return result
+
+    @classmethod
+    def _convert_time_from_twitter_to_mysql(cls, str_twitter_date):
+        # time data 'Wed Nov 02 12:51:23 +0000 2011' does not match format '%m/%d/%Y %I:%M:%S %p'
+        dt = datetime.strptime(str_twitter_date, TWITTER.TWITTER_API_TIME_FORMAT)
+        newdt = dt.strftime(DB.DB_TIME_FORMAT)
+        return newdt
 
 
 if __name__ == '__main__':
@@ -168,5 +384,7 @@ if __name__ == '__main__':
 }"""
     import json
 
-    tweet = json.loads(json_user)
-    save_user(tweet['user'])
+    tweet_json = json.loads(json_user)
+    tweet = Status.NewFromJsonDict(tweet_json)
+    db = TLInsightsDB(DB.DB_TEST_NAME)
+    db.save_tweet(tweet)
