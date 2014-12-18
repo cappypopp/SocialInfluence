@@ -14,9 +14,6 @@ from constants import DB, TWITTER
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-class TLInsightsException(Exception):
-    pass
-
 
 class TLInsightsDB(object):
 
@@ -34,11 +31,11 @@ class TLInsightsDB(object):
             @wraps(func)  # to keep __doc__, __name__, and __module__ pointing to the original function
             def decorated_query(self, *args):  # decorated function to return
                 try:
-                    func(self, *args)
+                    result = func(self, *args)
+                    return result
                 except mdb.MySQLError as e:
                     logger.error("Error: {:d} {}".format(e.args[0], e.args[1]))
                     logger.debug(self.cur._last_executed)
-                    raise TLInsightsException(tags)
             return decorated_query
         return _query_decorator
 
@@ -47,6 +44,14 @@ class TLInsightsDB(object):
         with self.cxn:
             q = "SELECT * from twposts WHERE id = %s"
             self.cur.execute(q, (tweet_id,))  # has to be a tuple, thus the ending comma
+            result = self.cur.fetchone()
+        return result
+
+    @_query_tag_decorator("tweet not found")
+    def get_user_by_id(self, user_id):
+        with self.cxn:
+            q = "SELECT * from twusers WHERE id = %s"
+            self.cur.execute(q, (user_id,))  # has to be a tuple, thus the ending comma
             result = self.cur.fetchone()
         return result
 
@@ -81,7 +86,7 @@ class TLInsightsDB(object):
                             %s,
                             %s,
                             %s,
-                            #%s,
+                            %s,
                             %s,
                             %s,
                             %s,
@@ -306,7 +311,8 @@ class TLInsightsDB(object):
 
     @classmethod
     def _decode_if_string(cls, val):
-        return val.decode("utf8") if isinstance(val, basestring) else val
+        # originally had basestring in the isinstance call but this caused unicode strings to call decode("utf8") as well
+         return val.decode("utf8") if isinstance(val, str) else val
 
     @_query_tag_decorator("can't save gos")
     def save_gos_interaction(self, gos_dict):
