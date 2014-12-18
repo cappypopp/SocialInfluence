@@ -131,36 +131,39 @@ json_tweets = r"""
 
 class TestDB(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        cls.DB = db.TLInsightsDB(DB.DB_TEST_NAME)
+        cls.tweets = json.loads(json_tweets, "utf-8")
+        cls.tweet1 = Status.NewFromJsonDict(cls.tweets[0])
+        cls.tweet2 = Status.NewFromJsonDict(cls.tweets[1])
+        cls.tweet3 = Status.NewFromJsonDict(cls.tweets[2])
+
     def setUp(self):
-        self.DB = db.TLInsightsDB(DB.DB_TEST_NAME)
-        self.tweets = json.loads(json_tweets, "utf-8")
+        pass
 
     def test_save_tweet(self):
-        tweet = Status.NewFromJsonDict(self.tweets[0])
-        result = self.DB.save_tweet(tweet)
+        result = self.DB.save_tweet(self.tweet1)
+        self.assertIsNotNone(result)
+
+    def test_save_user(self):
+        result = self.DB.save_user(self.tweet1.user)
         self.assertIsNotNone(result)
 
     def test_get_tweet_by_id_with_bad_id(self):
-        id = 1231542323423
-        with self.assertRaises(db.TweetNotFoundException):
-            result = self.DB.get_tweet_by_id(id)
-            logger.error(result)
+        tweet_id = 123
+        result = self.DB.get_tweet_by_id(tweet_id)
+        self.assertIsNone(result, "Tweet with id {:d} should not be found".format(tweet_id))
 
     def test_get_twitter_user_by_id_with_bad_id(self):
-        id = 123123123123
-        with self.assertRaises(db.UserNotFoundException):
-            result = self.DB.get_user_by_id(id)
-            logger.error(result)
+        user_id = 123
+        result = self.DB.get_user_by_id(user_id)
+        self.assertIsNone(result, "User with id {:d} should not be found".format(user_id))
 
     def test_get_twitter_user_by_id_with_good_id(self):
-        id = 403394026
-        result = self.DB.get_user_by_id(id)
-        self.assertIsNotNone(result, "User should not be None")
-
-    def test_get_twitter_user_by_id_with_good_id_verify_id(self):
-        id = 403394026
-        result = self.DB.get_user_by_id(id)
-        self.assertEqual(id, result['id'])
+        user_id = 403394026
+        result = self.DB.get_user_by_id(user_id)
+        self.assertIsNotNone(result, "User {:d} should be found and not None".format(user_id))
 
 if __name__ == '__main__':
     unittest.main()
