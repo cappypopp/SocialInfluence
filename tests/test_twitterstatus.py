@@ -20,8 +20,14 @@ class TestTwitterStatus(unittest.TestCase):
         db = twitterstatus.TLTwitterStatus.db
         self.assertIsNotNone(db, "db should not be None")
 
-    def test_get_tweet_by_id(self):
+    def test_get_tweet_by_id_bad_id(self):
         ts = twitterstatus.TLTwitterStatus()
         tweet_id = 1234
+        result = ts.get_tweet_by_id(tweet_id)
+        self.assertIsNone(result, "tweet with id {:d} should be found".format(tweet_id))
+
+    def test_get_tweet_by_id_good_id(self):
+        ts = twitterstatus.TLTwitterStatus()
+        tweet_id = 527042709786079233
         result = ts.get_tweet_by_id(tweet_id)
         self.assertIsNotNone(result, "tweet with id {:d} should be found".format(tweet_id))
