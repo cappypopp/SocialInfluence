@@ -161,7 +161,7 @@ class TestDB(unittest.TestCase):
         self.assertIsNone(result, "User with id {:d} should not be found".format(user_id))
 
     def test_get_twitter_user_by_id_with_good_id(self):
-        user_id = 403394026
+        user_id = 403394026  # AVGBusiness
         result = self.DB.get_user_by_id(user_id)
         self.assertIsNotNone(result, "User {:d} should be found and not None".format(user_id))
 
