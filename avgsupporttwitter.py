@@ -753,8 +753,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Creates csv containing Gauge of Service data for tweets",
                                      version='%(prog)s 1.0')
     parser.add_argument("-id", "--status_id", type=int, help="Just use this single tweet")
-    parser.add_argument("-n", "--nofiles", dest="quiet", action="store_true",
-                        help="if present no excel files written, only stdout")
+    parser.add_argument("-n", "--nofiles", dest="quiet", action="store_true", help="if present no excel files "
+                                                                                   "written, only stdout")
     parser.add_argument("-nc", "--nocache", action="store_true", help="Does not use or write to tweet cache. Useful"
                                                                       "for debugging Twitter API issues.")
     # parser.add_argument("-t", "--access_token", type=str, default="rDFfVkx9dIyfjdni3AUEnA", nargs="?",
