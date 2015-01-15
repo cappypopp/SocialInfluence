@@ -158,7 +158,7 @@ class TLTwitterStatus(object):
     def url(self):
         url = None
         if self.tweet_inst.id is not None:
-            url = "http://twitter.com/{}/status/{}".format(str(self.tweet_inst.user.id), str(self.tweet_inst.id))
+            url = u"http://twitter.com/{}/status/{}".format(str(self.tweet_inst.user.id), str(self.tweet_inst.id))
         return url
 
     def created_at_for_excel(self):
@@ -235,15 +235,18 @@ class TLTwitterStatus(object):
 
         return tweet_inst
 
-    def __str__(self):
+    def __unicode__(self):
         sb = []
         for k in self.__dict__:
             if k == 'tweet_inst':
                 value = simplejson.dumps(self.tweet_inst.AsDict(), sort_keys=True, indent=2, ensure_ascii=False)
             else:
                 value = self.__dict__[k]
-            sb.append("{}='{}'".format(k, value))
-        return ", ".join(sb)
+            sb.append(u"{}='{}'".format(k, value))
+        return u", ".join(sb)
+
+    def __str__(self):
+        return unicode(self).encode("utf-8")
 
     def __repr__(self):
-        return "%s: %r" % (self.__class__, self.__str__())
+        return "%s: %r" % (self.__class__, self.__unicode__())
