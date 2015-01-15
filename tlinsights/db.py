@@ -6,14 +6,15 @@ from datetime import datetime
 from functools import wraps
 from twitter import Status
 import logging
+import twitter
 import MySQLdb as mdb
 import MySQLdb.cursors as cursors
 
 from constants import DB, TWITTER
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 class TLInsightsDB(object):
 
@@ -42,7 +43,67 @@ class TLInsightsDB(object):
     @_query_tag_decorator("tweet not found")
     def get_tweet_by_id(self, tweet_id):
         with self.cxn:
+            q = "SELECT p.*, " \
+                "u.id as user_id," \
+                "u.name as user_name," \
+                "u.screen_name as user_screen_name," \
+                "u.created_at as user_created," \
+                "u.url as user_url," \
+                "u.description as user_description," \
+                "u.statuses_count as user_statuses_count," \
+                "u.favourites_count as user_favourites_count," \
+                "u.followers_count as user_followers_count," \
+                "u.friends_count as user_friends_count," \
+                "u.listed_count as user_listed_count," \
+                "u.location as user_location," \
+                "u.time_zone as user_time_zone," \
+                "u.lang as user_lang," \
+                "u.protected as user_protected," \
+                "u.verified as user_verified," \
+                "u.geo_enabled as user_geo_enabled " \
+                " from twposts p, twusers u " \
+                "WHERE p.id = %s AND p.user_id = u.id"
             q = "SELECT * from twposts WHERE id = %s"
+            self.cur.execute(q, (tweet_id,))  # has to be a tuple, thus the ending comma
+            result = self.cur.fetchone()
+            if result is not None:
+                tw = twitter.Status.NewFromJsonDict(result)
+                #TODO: migrate this code!
+                tw.SetCreatedAt(self._convert_time_from_mysql_to_twitter(tw.created_at))
+                q = "SELECT * from twusers WHERE id = %s"
+                self.cur.execute(q, (result["user_id"],))
+                result = self.cur.fetchone()
+                if result is not None:
+                    user = twitter.User.NewFromJsonDict(result)
+                    if user is not None:
+                        user.SetCreatedAt(self._convert_time_from_mysql_to_twitter(user.created_at))
+                        tw.SetUser(user)
+                        result = tw
+        return result
+
+    @_query_tag_decorator("tweet not found")
+    def get_tweet_by_id_raw(self, tweet_id):
+        with self.cxn:
+            q = "SELECT p.*, " \
+                "u.id as user_id," \
+                "u.name as user_name," \
+                "u.screen_name as user_screen_name," \
+                "u.created_at as user_created_at," \
+                "u.url as user_url," \
+                "u.description as user_description," \
+                "u.statuses_count as user_statuses_count," \
+                "u.favourites_count as user_favourites_count," \
+                "u.followers_count as user_followers_count," \
+                "u.friends_count as user_friends_count," \
+                "u.listed_count as user_listed_count," \
+                "u.location as user_location," \
+                "u.time_zone as user_time_zone," \
+                "u.lang as user_lang," \
+                "u.protected as user_protected," \
+                "u.verified as user_verified," \
+                "u.geo_enabled as user_geo_enabled " \
+                " from twposts p, twusers u " \
+                "WHERE p.id = %s AND p.user_id = u.id"
             self.cur.execute(q, (tweet_id,))  # has to be a tuple, thus the ending comma
             result = self.cur.fetchone()
         return result
@@ -50,7 +111,7 @@ class TLInsightsDB(object):
     @_query_tag_decorator("tweet not found")
     def get_user_by_id(self, user_id):
         with self.cxn:
-            q = "SELECT * from twusers WHERE id = %s"
+            q = "SELECT * from u WHERE id = %s"
             self.cur.execute(q, (user_id,))  # has to be a tuple, thus the ending comma
             result = self.cur.fetchone()
         return result
@@ -76,8 +137,10 @@ class TLInsightsDB(object):
                                     in_reply_to_screen_name,
                                     lang,
                                     truncated,
-                                    possibly_sensitive)
+                                    possibly_sensitive,
+                                    unanswered)
                     VALUES (%s,
+                            %s,
                             %s,
                             %s,
                             %s,
@@ -97,7 +160,8 @@ class TLInsightsDB(object):
                       retweet_count = VALUES(retweet_count),
                       favorited = VALUES(favorited),
                       favorite_count = VALUES(favorite_count),
-                      possibly_sensitive = VALUES(possibly_sensitive);
+                      possibly_sensitive = VALUES(possibly_sensitive),
+                      unanswered = VALUES(unanswered);
                     """
 
         with self.cxn:
@@ -115,7 +179,8 @@ class TLInsightsDB(object):
                 tweet.in_reply_to_screen_name,
                 self._decode_if_string(tweet.lang),
                 tweet.truncated,
-                tweet.possibly_sensitive
+                tweet.possibly_sensitive,
+                tweet.unanswered
             )
 
             result = self.cur.execute(q, arg_tuple)
@@ -128,15 +193,22 @@ class TLInsightsDB(object):
             self.save_tweet(tw)
 
     @_query_tag_decorator("can't save 404 tweet")
-    def save_404_tweet(self,tweet):
+    def save_404_tweet(self, id):
 
         with self.cxn:
             q = "INSERT IGNORE INTO tw404posts(id) VALUES (%s)"
-            self.cur.execute(q, (tweet['id'],))
+            self.cur.execute(q, (id,))
 
     def save_404_tweets(self, tweets):
         for tw in tweets:
             self.save_404_tweet(tw)
+
+    def is_404_tweet(self, id):
+        with self.cxn:
+            q = "SELECT COUNT(*) as dead_tweet FROM tw404posts WHERE id = %s"
+            self.cur.execute(q, (id,))
+            result = self.cur.fetchone()
+            return 'dead_tweet' in result and result['dead_tweet'] == 1
 
     @_query_tag_decorator("can't save user")
     def save_user(self, twitter_user):
@@ -225,7 +297,7 @@ class TLInsightsDB(object):
 
         with self.cxn:
 
-            q = """INSERT INTO twusers (
+            q = """INSERT INTO u (
                                     id,
                                     name,
                                     created_at,
@@ -349,6 +421,11 @@ class TLInsightsDB(object):
         # time data 'Wed Nov 02 12:51:23 +0000 2011' does not match format '%m/%d/%Y %I:%M:%S %p'
         dt = datetime.strptime(str_twitter_date, TWITTER.TWITTER_API_TIME_FORMAT)
         newdt = dt.strftime(DB.DB_TIME_FORMAT)
+        return newdt
+
+    @classmethod
+    def _convert_time_from_mysql_to_twitter(cls, dt):
+        newdt = dt.strftime(TWITTER.TWITTER_API_TIME_FORMAT)
         return newdt
 
 
