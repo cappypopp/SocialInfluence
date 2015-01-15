@@ -4,7 +4,6 @@ __author__ = 'cappy'
 import unittest
 import logging
 import twitter
-from functools import wraps
 
 from tlinsights import twitterstatus, utils
 
