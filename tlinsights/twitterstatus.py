@@ -249,4 +249,4 @@ class TLTwitterStatus(object):
         return unicode(self).encode("utf-8")
 
     def __repr__(self):
-        return "%s: %r" % (self.__class__, self.__unicode__())
+        return "%s: %r" % (self.__class__, self.__str__())

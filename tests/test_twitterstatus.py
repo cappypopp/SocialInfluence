@@ -87,6 +87,7 @@ class TestTwitterStatus(unittest.TestCase):
         self.assertTrue(len(s) > 0)
         self.assertTrue("tweet_inst" in s)
         self.assertTrue("unanswered" in s)
+        self.assertIsInstance(s, str)
 
     @utils.logged()
     def test_repr_method(self):
@@ -98,6 +99,19 @@ class TestTwitterStatus(unittest.TestCase):
         self.assertTrue(len(s) > 0)
         self.assertTrue("tweet_inst" in s)
         self.assertTrue("unanswered" in s)
+        self.assertIsInstance(s, str)
+
+    @utils.logged()
+    def test_unicode_method(self):
+        inst = twitterstatus.TLTwitterStatus({})
+        self.assertIsNotNone(inst)
+        s = unicode(inst)
+        logging.debug(s)
+        self.assertIsNotNone(s)
+        self.assertTrue(len(s) > 0)
+        self.assertTrue("tweet_inst" in s)
+        self.assertTrue("unanswered" in s)
+        self.assertIsInstance(s, unicode)
 
     @utils.logged()
     def test_detailed_str_method(self):
