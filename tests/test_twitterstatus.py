@@ -167,10 +167,3 @@ class TestTwitterStatus(unittest.TestCase):
                     if isinstance(v, basestring):
                         logger.debug("testing {}".format(v))
                         self.assertIsInstance(v, unicode)
-
-'''
-    def test_get_user_by_id_good_id(self):
-        tweet_id = 403394026
-        result = twitterstatus.TLTwitterUser.get_user_by_id(tweet_id)
-        self.assertIsNotNone(result, "tweet with id {:d} should be found".format(tweet_id))
-        '''
