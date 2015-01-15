@@ -170,6 +170,16 @@ class TLTwitterStatus(object):
         s = dt.strftime(constants.TWITTER.TWITTER_TIME_FORMAT)
         return s
 
+    @staticmethod
+    def created_at_for_twitter_api(created_at):
+        if isinstance(created_at, basestring):
+            dt = parse(created_at)
+        else:
+            dt = created_at
+
+        s = dt.strftime(constants.TWITTER.TWITTER_API_TIME_FORMAT)
+        return s
+
     @classmethod
     def get_tweet_by_id(cls, tweet_id):
 
@@ -207,15 +217,13 @@ class TLTwitterStatus(object):
 
         # need to put in "Mon Jun 02 20:49:22 +0000 2014" format so that twitter.Status behaves correctly
         # database returns it as a datetime
-        created_at_str = tweet_dict['created_at'].strftime(constants.TWITTER.TWITTER_API_TIME_FORMAT)
-        tweet_dict['created_at'] = created_at_str
+        tweet_dict['created_at'] = cls.created_at_for_twitter_api(tweet_dict['created_at'])
 
         # split off twitter user from db dict (all fields start with 'user_' - we will strip that)
         user_dict = {k[len("user_"):]: v for k, v in db_dict.iteritems() if k.startswith("user_")}
 
         # fix created_at value
-        created_at_str = user_dict['created_at'].strftime(constants.TWITTER.TWITTER_API_TIME_FORMAT)
-        user_dict['created_at'] = created_at_str
+        user_dict['created_at'] = cls.created_at_for_twitter_api(user_dict['created_at'])
 
         # set it so the twitter.Status object will be initialized correctly
         tweet_dict['user'] = user_dict
