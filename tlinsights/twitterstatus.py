@@ -167,7 +167,8 @@ class TLTwitterStatus(object):
         else:
             dt = self.created_at
 
-        s = dt.strftime(constants.TWITTER.TWITTER_TIME_FORMAT)
+        # always deal in Unicode internally - thus decode call!
+        s = dt.strftime(constants.TWITTER.TWITTER_TIME_FORMAT).decode("utf-8")
         return s
 
     @staticmethod
@@ -177,7 +178,8 @@ class TLTwitterStatus(object):
         else:
             dt = created_at
 
-        s = dt.strftime(constants.TWITTER.TWITTER_API_TIME_FORMAT)
+        # always deal in Unicode internally - thus decode call!
+        s = dt.strftime(constants.TWITTER.TWITTER_API_TIME_FORMAT).decode("utf-8")
         return s
 
     @classmethod
