@@ -75,7 +75,7 @@ class TestTwitterStatus(unittest.TestCase):
         datestr = result.created_at_for_excel()
         logging.debug(datestr)
         self.assertIsNotNone(datestr)
-        self.assertIsInstance(datestr, str)
+        self.assertIsInstance(datestr, unicode)
 
     @utils.logged()
     def test_str_method(self):
@@ -135,9 +135,24 @@ class TestTwitterStatus(unittest.TestCase):
         inst = twitterstatus.TLTwitterStatus.get_tweet_by_id(self.tweet_id_good)
         self.assertIsNotNone(inst)
         s = inst.url()
+        logger.debug(s)
         self.assertIsNotNone(s)
-        self.assertIsInstance(s, str)
+        self.assertIsInstance(s, unicode)
         self.assertTrue(len(s) > len("http://twitter.com/1/status/1"))
+
+    @utils.logged()
+    def test_everything_stored_as_unicode(self):
+        inst = twitterstatus.TLTwitterStatus.get_tweet_by_id(self.tweet_id_good)
+        self.assertIsNotNone(inst)
+        for k, v in inst.__dict__.iteritems():
+            if isinstance(v, basestring):
+                logger.debug("testing {}".format(v))
+                self.assertIsInstance(v, unicode)
+            if isinstance(v, twitter.Status):
+                for v in inst.tweet_inst.__dict__.values():
+                    if isinstance(v, basestring):
+                        logger.debug("testing {}".format(v))
+                        self.assertIsInstance(v, unicode)
 
 '''
     def test_get_user_by_id_good_id(self):
