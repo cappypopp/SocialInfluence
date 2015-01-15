@@ -154,22 +154,6 @@ class TLTwitterStatus(object):
     def __getattr__(self, item):
         return getattr(self.tweet_inst, item)
 
-    # need to call parent ctor?
-    def __init__other(self, data=None, **kwargs):
-        param_defaults = {
-            'unanswered': False
-        }
-
-        for (param, default) in param_defaults.iteritems():
-            setattr(self, param, kwargs.get(param, default))
-
-        if data is None:
-            # init base
-            super(TLTwitterStatus, self).__init__(**kwargs)
-        else:
-            for(k, v) in data.iteritems():
-                setattr(self, param, data.get(k, None))
-
 
     def url(self):
         url = None
@@ -217,10 +201,6 @@ class TLTwitterStatus(object):
         return tweet
 
     @classmethod
-    def save_tweet(cls, tweet):
-        pass
-
-    @classmethod
     def _build_tweet_from_db(cls, db_dict):
         # split off the twitter.Status keys into a twitter.Status-friendly dict
         tweet_dict = {k: v for k, v in db_dict.iteritems() if not k.startswith("user_")}
@@ -257,16 +237,3 @@ class TLTwitterStatus(object):
 
     def __repr__(self):
         return "%s: %r" % (self.__class__, self.__str__())
-
-
-
-class TLTwitterUser(twitter.User):
-
-    db = db.TLInsightsDB(constants.DB.DB_TEST_NAME)
-
-    def __init__(self):
-        pass
-
-    @classmethod
-    def get_user_by_id(cls, id):
-        return id
