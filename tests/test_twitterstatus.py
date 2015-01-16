@@ -87,6 +87,7 @@ class TestTwitterStatus(unittest.TestCase):
         self.assertIsNotNone(date_str)
         self.assertGreater(len(date_str), 0)
         self.assertIsInstance(date_str, unicode)
+        self.assertRegexpMatches(date_str, "\w{3} \w{3} \d{2} \d{2}:\d{2}:\d{2} \+0000 20\d\d")  # 'Wed Nov 02 12:51:23 +0000 2011'
 
     @utils.logged()
     def test_get_date_as_string_in_format_excel(self):
@@ -96,6 +97,7 @@ class TestTwitterStatus(unittest.TestCase):
         self.assertIsNotNone(date_str)
         self.assertGreater(len(date_str), 0)
         self.assertIsInstance(date_str, unicode)
+        self.assertRegexpMatches(date_str, "\d{2}/\d{2}/20\d{2} \d{2}:\d{2}:\d{2} [AP]M")  # 12/30/2013 09:00:03 PM
 
     @utils.logged()
     def test_get_date_as_string_in_format_twitter_api_external(self):
@@ -106,9 +108,6 @@ class TestTwitterStatus(unittest.TestCase):
         self.assertGreater(len(date_str), 0)
         self.assertIsInstance(date_str, unicode)
 
-        # TODO: regexp match
-        #self.assertRegexpMatches(date_str, )
-
     @utils.logged()
     def test_get_date_as_string_in_format_excel_external(self):
         dt = datetime.datetime.now()
@@ -117,8 +116,6 @@ class TestTwitterStatus(unittest.TestCase):
         self.assertIsNotNone(date_str)
         self.assertGreater(len(date_str), 0)
         self.assertIsInstance(date_str, unicode)
-        # TODO: regexp match
-        #self.assertRegexpMatches(date_str, )
 
     @utils.logged()
     def test_get_date_as_string_in_format_str(self):
@@ -130,8 +127,6 @@ class TestTwitterStatus(unittest.TestCase):
         self.assertIsNotNone(date_str)
         self.assertGreater(len(date_str), 0)
         self.assertIsInstance(date_str, unicode)
-        # TODO: regexp match
-        #self.assertRegexpMatches(date_str, )
 
     @utils.logged()
     def test_get_date_as_string_in_format_unicode(self):
@@ -143,8 +138,6 @@ class TestTwitterStatus(unittest.TestCase):
         self.assertIsNotNone(date_str)
         self.assertGreater(len(date_str), 0)
         self.assertIsInstance(date_str, unicode)
-        # TODO: regexp match
-        #self.assertRegexpMatches(date_str, )
 
     @utils.logged()
     def test_get_date_as_string_in_format(self):
