@@ -3,6 +3,7 @@ __author__ = 'cappy'
 
 import unittest
 import mock
+import datetime
 import logging
 import twitter
 from tlinsights import constants
@@ -91,6 +92,64 @@ class TestTwitterStatus(unittest.TestCase):
     def test_get_date_as_string_in_format_excel(self):
         result = twitterstatus.TLTwitterStatus.get_tweet_by_id(self.tweet_id_good)
         date_str = result.get_date_as_string_in_format(result.created_at, constants.TWITTER.TWITTER_TIME_FORMAT)
+        logger.debug(date_str)
+        self.assertIsNotNone(date_str)
+        self.assertGreater(len(date_str), 0)
+        self.assertIsInstance(date_str, unicode)
+
+    @utils.logged()
+    def test_get_date_as_string_in_format_twitter_api_external(self):
+        dt = datetime.datetime.now()
+        date_str = twitterstatus.TLTwitterStatus.get_date_as_string_in_format(dt, constants.TWITTER.TWITTER_API_TIME_FORMAT)
+        logger.debug(date_str)
+        self.assertIsNotNone(date_str)
+        self.assertGreater(len(date_str), 0)
+        self.assertIsInstance(date_str, unicode)
+
+        # TODO: regexp match
+        #self.assertRegexpMatches(date_str, )
+
+    @utils.logged()
+    def test_get_date_as_string_in_format_excel_external(self):
+        dt = datetime.datetime.now()
+        date_str = twitterstatus.TLTwitterStatus.get_date_as_string_in_format(dt, constants.TWITTER.TWITTER_TIME_FORMAT)
+        logger.debug(date_str)
+        self.assertIsNotNone(date_str)
+        self.assertGreater(len(date_str), 0)
+        self.assertIsInstance(date_str, unicode)
+        # TODO: regexp match
+        #self.assertRegexpMatches(date_str, )
+
+    @utils.logged()
+    def test_get_date_as_string_in_format_str(self):
+        date_str = datetime.datetime.now().strftime(constants.TWITTER.TWITTER_API_TIME_FORMAT)
+        self.assertIsInstance(date_str, str)
+        date_str = twitterstatus.TLTwitterStatus.get_date_as_string_in_format(date_str,
+                                                                              constants.TWITTER.TWITTER_TIME_FORMAT)
+        logger.debug(date_str)
+        self.assertIsNotNone(date_str)
+        self.assertGreater(len(date_str), 0)
+        self.assertIsInstance(date_str, unicode)
+        # TODO: regexp match
+        #self.assertRegexpMatches(date_str, )
+
+    @utils.logged()
+    def test_get_date_as_string_in_format_unicode(self):
+        date_str = datetime.datetime.now().strftime(constants.TWITTER.TWITTER_API_TIME_FORMAT).decode("utf-8")
+        self.assertIsInstance(date_str, unicode)
+        date_str = twitterstatus.TLTwitterStatus.get_date_as_string_in_format(date_str,
+                                                                              constants.TWITTER.TWITTER_TIME_FORMAT)
+        logger.debug(date_str)
+        self.assertIsNotNone(date_str)
+        self.assertGreater(len(date_str), 0)
+        self.assertIsInstance(date_str, unicode)
+        # TODO: regexp match
+        #self.assertRegexpMatches(date_str, )
+
+    @utils.logged()
+    def test_get_date_as_string_in_format(self):
+        dt = datetime.datetime.now()
+        date_str = twitterstatus.TLTwitterStatus.get_date_as_string_in_format(dt, constants.TWITTER.TWITTER_TIME_FORMAT)
         logger.debug(date_str)
         self.assertIsNotNone(date_str)
         self.assertGreater(len(date_str), 0)
