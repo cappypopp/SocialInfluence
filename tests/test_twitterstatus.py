@@ -2,8 +2,10 @@
 __author__ = 'cappy'
 
 import unittest
+import mock
 import logging
 import twitter
+from tlinsights import constants
 
 from tlinsights import twitterstatus, utils
 
@@ -72,16 +74,35 @@ class TestTwitterStatus(unittest.TestCase):
     def test_created_at_for_excel(self):
         result = twitterstatus.TLTwitterStatus.get_tweet_by_id(self.tweet_id_good)
         datestr = result.created_at_for_excel()
-        logging.debug(datestr)
+        logger.debug(datestr)
         self.assertIsNotNone(datestr)
         self.assertIsInstance(datestr, unicode)
+
+    @utils.logged()
+    def test_get_date_as_string_in_format_twitter(self):
+        result = twitterstatus.TLTwitterStatus.get_tweet_by_id(self.tweet_id_good)
+        date_str = result.get_date_as_string_in_format(result.created_at, constants.TWITTER.TWITTER_API_TIME_FORMAT)
+        logger.debug(date_str)
+        self.assertIsNotNone(date_str)
+        self.assertGreater(len(date_str), 0)
+        self.assertIsInstance(date_str, unicode)
+
+    @utils.logged()
+    def test_get_date_as_string_in_format_excel(self):
+        result = twitterstatus.TLTwitterStatus.get_tweet_by_id(self.tweet_id_good)
+        date_str = result.get_date_as_string_in_format(result.created_at, constants.TWITTER.TWITTER_TIME_FORMAT)
+        logger.debug(date_str)
+        self.assertIsNotNone(date_str)
+        self.assertGreater(len(date_str), 0)
+        self.assertIsInstance(date_str, unicode)
+
 
     @utils.logged()
     def test_str_method(self):
         inst = twitterstatus.TLTwitterStatus({})
         self.assertIsNotNone(inst)
         s = str(inst)
-        logging.debug(s)
+        logger.debug(s)
         self.assertIsNotNone(s)
         self.assertTrue(len(s) > 0)
         self.assertTrue("tweet_inst" in s)
@@ -93,7 +114,7 @@ class TestTwitterStatus(unittest.TestCase):
         inst = twitterstatus.TLTwitterStatus({})
         self.assertIsNotNone(inst)
         s = repr(inst)
-        logging.debug(s)
+        logger.debug(s)
         self.assertIsNotNone(s)
         self.assertTrue(len(s) > 0)
         self.assertTrue("tweet_inst" in s)
@@ -105,7 +126,7 @@ class TestTwitterStatus(unittest.TestCase):
         inst = twitterstatus.TLTwitterStatus({})
         self.assertIsNotNone(inst)
         s = unicode(inst)
-        logging.debug(s)
+        logger.debug(s)
         self.assertIsNotNone(s)
         self.assertTrue(len(s) > 0)
         self.assertTrue("tweet_inst" in s)
@@ -117,7 +138,7 @@ class TestTwitterStatus(unittest.TestCase):
         inst = twitterstatus.TLTwitterStatus.get_tweet_by_id(self.tweet_id_good)
         self.assertIsNotNone(inst)
         s = str(inst)
-        logging.debug(s)
+        logger.debug(s)
         self.assertIsNotNone(s)
         self.assertTrue(len(s) > 0)
         self.assertTrue("tweet_inst" in s)
@@ -129,7 +150,7 @@ class TestTwitterStatus(unittest.TestCase):
         inst = twitterstatus.TLTwitterStatus.get_tweet_by_id(self.tweet_id_good)
         self.assertIsNotNone(inst)
         s = repr(inst)
-        logging.debug(s)
+        logger.debug(s)
         self.assertIsNotNone(s)
         self.assertTrue(len(s) > 0)
         self.assertTrue("tweet_inst" in s)

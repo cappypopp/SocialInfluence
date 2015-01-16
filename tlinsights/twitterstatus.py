@@ -152,14 +152,30 @@ class TLTwitterStatus(object):
             setattr(self, param, kwargs.get(param, default))
 
     def __getattr__(self, item):
+        '''
+        this will ONLY be called if the attribute can't be found on this instance; in that case
+        we defer to checking the wrapped twitter.Status object
+        :param item: attribute you are looking for
+        :return: value of attribute if found
+        '''
         return getattr(self.tweet_inst, item)
 
 
     def url(self):
         url = None
         if self.tweet_inst.id is not None:
+            # those strs will be converted to unicode internally
             url = u"http://twitter.com/{}/status/{}".format(str(self.tweet_inst.user.id), str(self.tweet_inst.id))
         return url
+
+    @staticmethod
+    def get_date_as_string_in_format(created_at, time_format):
+
+        dt = created_at if not isinstance(created_at, basestring) else parse(created_at)
+
+        # ALWAYS use Unicode internally!
+        s = dt.strftime(time_format).decode("utf-8")
+        return s
 
     def created_at_for_excel(self):
         if isinstance(self.created_at, basestring):
@@ -220,6 +236,7 @@ class TLTwitterStatus(object):
         # need to put in "Mon Jun 02 20:49:22 +0000 2014" format so that twitter.Status behaves correctly
         # database returns it as a datetime
         tweet_dict['created_at'] = cls.created_at_for_twitter_api(tweet_dict['created_at'])
+        #tweet_dict['created_at'] = cls.get_date_as_string_in_format(constants.TWITTER.TWITTER_API_TIME_FORMAT)
 
         # split off twitter user from db dict (all fields start with 'user_' - we will strip that)
         user_dict = {k[len("user_"):]: v for k, v in db_dict.iteritems() if k.startswith("user_")}
