@@ -32,7 +32,7 @@ class ExcelWriter(object):
                      format_obj=None,
                      data_format=lambda x: x,
                      text_wrap=False,
-                     excel_format_func=None,
+                     excel_format_func="write_string",
                      excel_format_func_args=None):
             self.name = name
             self.col_width = col_width
@@ -96,20 +96,23 @@ class ExcelWriter(object):
                                              datetime.datetime.strptime(x, self.DEFAULT_DATE_FORMAT),
                                              excel_format_func="write_datetime")
 
+        #post_date_day = ExcelWriter.ColumnFormat()
+        #post_date_day.__dict__.update(post_date.__dict__)
+        #post_date.name = "DayOnlyDate"
+
         post_date_day = ExcelWriter.ColumnFormat(workbook=self._wb,
                                                  name="DayOnlyDate",
                                                  col_width=13.5,
                                                  format_obj={"font_size": 9,
                                                              "num_format": "mm/dd/yy"},
                                                  data_format=lambda x:
-                                                 datetime.datetime.strptime(x, self.DATE_ONLY_DATE_FORMAT),
+                                                 datetime.datetime.strptime(x, self.DEFAULT_DATE_FORMAT),
                                                  excel_format_func="write_datetime")
 
         post_message = ExcelWriter.ColumnFormat(workbook=self._wb,
                                                 name="PostMessage",
                                                 col_width=50,
-                                                text_wrap=True,
-                                                excel_format_func="write_string")
+                                                text_wrap=True)
 
         # shallow class attribute copies
         reply_date = ExcelWriter.ColumnFormat()
@@ -146,10 +149,15 @@ class ExcelWriter(object):
         self._col_headers = [post_id,
                              post,
                              post_date,
+                             post_date_day,
                              post_message,
                              reply_date,
                              reply_message,
-                             gos]
+                             gos,
+                             post_from_zach,
+                             post_from_aiyman,
+                             post_was_escalation,
+                             post_from_cz]
 
     def add_sheet(self, name, sheet_data):
 
