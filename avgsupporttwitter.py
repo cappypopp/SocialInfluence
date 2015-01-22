@@ -51,7 +51,7 @@ def make_sure_path_exists(path):
 
 def get_url(self):
     # http://twitter.com/{twitter-user-id}/status/{tweet-status-id}
-    return "http://twitter.com/%s/status/%s" % (str(self.user.id), str(self._id))
+    return u"http://twitter.com/%s/status/%s" % (str(self.user.id), str(self._id))
 
 
 def pretty_tweet(self, allow_non_ascii=False):
@@ -74,7 +74,7 @@ def GetTweetDetail(self):
     :param self:
     :return:
     """
-    s = "%s [%s]" % (self.text, self.GetTweetTimeForExcel())
+    s = u"%s [%s]" % (self.text, self.GetTweetTimeForExcel())
     return s
 
 
@@ -84,7 +84,7 @@ def GetTweetTimeForExcel(self):
     else:
         dt = self.created_at
 
-    s = dt.strftime(TWITTER.TWITTER_TIME_FORMAT)
+    s = unicode(dt.strftime(TWITTER.TWITTER_TIME_FORMAT))
     return s
 
 # hacky way to extend a class at runtime but don't know how to do it otherwise
@@ -783,7 +783,7 @@ def time_between_tweets_in_hours(tw1, tw2):
     tweet1_time = tw1.created_at if isinstance(tw1.created_at, datetime.datetime) else parse(tw1.created_at.encode("utf-8"))
     tweet2_time = tw2.created_at if isinstance(tw2.created_at, datetime.datetime) else parse(tw2.created_at.encode("utf-8"))
     diff = tweet2_time - tweet1_time
-    return "{:0.1f}".format(diff.total_seconds() / 60 / 60)
+    return u"{:0.1f}".format(diff.total_seconds() / 60 / 60)
 
 
 def do_api_sleep():
