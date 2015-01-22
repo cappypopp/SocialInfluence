@@ -8,6 +8,7 @@ import json
 class ExcelWriter(object):
 
     DEFAULT_DATE_FORMAT = "%m/%d/%Y %I:%M:%S %p"
+    DATE_ONLY_DATE_FORMAT = "%m/%d/%Y"
     EXCEL_FILE_EXTENSION = ".xlsx"
 
     class ColumnFormat(object):
@@ -92,8 +93,17 @@ class ExcelWriter(object):
                                              format_obj={"font_size": 9,
                                                          "num_format": "mm/dd/yy hh:mm:ss"},
                                              data_format=lambda x:
-                                             datetime.datetime.strptime(x, ExcelWriter.DEFAULT_DATE_FORMAT),
+                                             datetime.datetime.strptime(x, self.DEFAULT_DATE_FORMAT),
                                              excel_format_func="write_datetime")
+
+        post_date_day = ExcelWriter.ColumnFormat(workbook=self._wb,
+                                                 name="DayOnlyDate",
+                                                 col_width=13.5,
+                                                 format_obj={"font_size": 9,
+                                                             "num_format": "mm/dd/yy"},
+                                                 data_format=lambda x:
+                                                 datetime.datetime.strptime(x, self.DATE_ONLY_DATE_FORMAT),
+                                                 excel_format_func="write_datetime")
 
         post_message = ExcelWriter.ColumnFormat(workbook=self._wb,
                                                 name="PostMessage",
@@ -109,6 +119,23 @@ class ExcelWriter(object):
         reply_message = ExcelWriter.ColumnFormat()
         reply_message.__dict__.update(post_message.__dict__)
         reply_message.name = "ReplyMessage"
+
+        post_from_zach = ExcelWriter.ColumnFormat(workbook=self._wb,
+                                                  name="Zach",
+                                                  col_width=8)
+
+        post_from_aiyman = ExcelWriter.ColumnFormat()
+        post_from_aiyman.__dict__.update(post_from_zach.__dict__)
+        post_from_aiyman.name = "Aiyman"
+
+        post_from_cz = ExcelWriter.ColumnFormat()
+        post_from_cz.__dict__.update(post_from_zach.__dict__)
+        post_from_cz.name = "CZ"
+
+        post_was_escalation = ExcelWriter.ColumnFormat()
+        post_was_escalation.__dict__.update(post_from_zach.__dict__)
+        post_was_escalation.name = "Esc"
+
 
         gos = ExcelWriter.ColumnFormat(workbook=self._wb,
                                        name="GOS",
@@ -235,12 +262,12 @@ class ExcelWriter(object):
         :param item: name of worksheet
         :return: worksheet object specified by name
         """
-        if not isinstance(item, str):
+        if not isinstance(item, basestring):
             raise ValueError("sheet name required")
         else:
             return self._ws[item]
 
-
+"""
 if __name__ == '__main__':
     twitter_data_dir = "twitter-gos-data"
     tweets_file = "{}/TW-First Touch Data.json".format(twitter_data_dir)
@@ -271,3 +298,4 @@ if __name__ == '__main__':
         ws.write_number(1, 0, int("3"), wb.add_format({"font_size": 9}))
 
         wb.close()
+"""
