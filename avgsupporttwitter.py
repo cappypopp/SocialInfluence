@@ -537,8 +537,8 @@ def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, tweets_processed, t
                 tweet_time = tw.created_at if isinstance(tw.created_at, datetime.datetime) else \
                     parse(tw.created_at)
                 row = [tw.id,
-                       "http://twitter.com/{}/status/{}".format(tw.user.id, tw.id),
-                       tweet_time.strftime(TWITTER.TWITTER_TIME_FORMAT),
+                       u"http://twitter.com/{}/status/{}".format(tw.user.id, tw.id),
+                       unicode(tweet_time.strftime(TWITTER.TWITTER_TIME_FORMAT)),
                        tw.text]
 
                 logger.debug(row)
