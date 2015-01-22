@@ -229,12 +229,19 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
         csv_first_row["PostId"] = ut.GetId()
         csv_first_row["Post"] = ut.GetUrl()
         csv_first_row["PostDate"] = ut.GetTweetTimeForExcel()
+        csv_first_row["DayOnlyDate"] = ut.GetTweetTimeForExcel()
         csv_first_row["PostMessage"] = ut.GetText()
 
         csv_first_row["ReplyDate"] = ft.GetTweetTimeForExcel()
-        csv_first_row["ReplyMessage"] = ft.GetText()
+        tweet_text = ft.GetText()
+        csv_first_row["ReplyMessage"] = tweet_text
         csv_first_row["GOS"] = time_between_tweets_in_hours(ut, ft)
+        csv_first_row["Zach"] = u"Y" if search(r"\^ZCS?", tweet_text, IGNORECASE) else u"N"
+        csv_first_row["Aiyman"] = u"Y" if search(r"\^AHS?", tweet_text, IGNORECASE) else u"N"
+        csv_first_row["Esc"] = u"Y" if search(r"#AVGSupport|@AVGSupport", tweet_text, IGNORECASE) else u"N"
+        csv_first_row["CZ"] = u"Y" if search(r"\^(JM|ZP)", tweet_text, IGNORECASE) else u"N"
 
+        logger.debug(csv_first_row)
         logger.debug("GOS [first user:{} support:{}]: {}".format(csv_first_row["PostId"],
                                                                  ft.GetId(), csv_first_row["GOS"]))
         csv_data["first"].append(csv_first_row)
@@ -247,10 +254,15 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
             csv_first_row["PostId"],
             csv_first_row["Post"],
             csv_first_row["PostDate"],
+            csv_first_row["DayOnlyDate"],
             csv_first_row["PostMessage"],
             csv_first_row["ReplyDate"],
             csv_first_row["ReplyMessage"],
-            csv_first_row["GOS"]
+            csv_first_row["GOS"],
+            csv_first_row["Zach"],
+            csv_first_row["Aiyman"],
+            csv_first_row["Esc"],
+            csv_first_row["CZ"]
         ]
 
         excel_data["TW-First Touch Data"].append(excel_first_row)
@@ -262,11 +274,18 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
             csv_support_row["PostId"] = ut.GetId()
             csv_support_row["Post"] = ut.GetUrl()
             csv_support_row["PostDate"] = ut.GetTweetTimeForExcel()
+            csv_support_row["DayOnlyDate"] = ut.GetTweetTimeForExcel()
             csv_support_row["PostMessage"] = ut.GetText()  # .encode('utf-8')
 
             csv_support_row["ReplyDate"] = fs.GetTweetTimeForExcel()
-            csv_support_row["ReplyMessage"] = fs.GetText()  # .encode('utf-8')
+            tweet_text = fs.GetText()
+            csv_support_row["ReplyMessage"] = tweet_text  # .encode('utf-8')
             csv_support_row["GOS"] = time_between_tweets_in_hours(ut, fs)
+
+            csv_support_row["Zach"] = u"Y" if search(r"\^ZCS?", tweet_text, IGNORECASE) else u"N"
+            csv_support_row["Aiyman"] = u"Y" if search(r"\^AHS?", tweet_text, IGNORECASE) else u"N"
+            csv_support_row["Esc"] = u"Y" if search(r"#AVGSupport|@AVGSupport", tweet_text, IGNORECASE) else u"N"
+            csv_support_row["CZ"] = u"Y" if search(r"\^(JM|ZP)", tweet_text, IGNORECASE) else u"N"
 
             logger.debug("GOS [support user:{} support:{}]: {}".format(csv_support_row["PostId"], fs.GetId(),
                                                                 csv_support_row["GOS"]))
@@ -282,10 +301,15 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
                 csv_support_row["PostId"],
                 csv_support_row["Post"],
                 csv_support_row["PostDate"],
+                csv_support_row["DayOnlyDate"],
                 csv_support_row["PostMessage"],
                 csv_support_row["ReplyDate"],
                 csv_support_row["ReplyMessage"],
-                csv_support_row["GOS"]
+                csv_support_row["GOS"],
+                csv_support_row["Zach"],
+                csv_support_row["Aiyman"],
+                csv_support_row["Esc"],
+                csv_support_row["CZ"]
             ]
 
             excel_data["TW-Support First Touch Data"].append(excel_support_row)
@@ -547,9 +571,10 @@ def write_to_excel(excel_data, filename="TW-FirstTouchDataTest.xlsx"):
         w.create_workbook("{}/{}".format(twitter_data_dir, filename))
 
         for sheet_name, twitter_data in excel_data.iteritems():
-            with open("{}/{}.json".format(twitter_data_dir, sheet_name), "wb") as fp:
-                json.dump(twitter_data, fp)
-            w.add_sheet(sheet_name, twitter_data)
+            if len(twitter_data):
+                with open("{}/{}.json".format(twitter_data_dir, sheet_name), "wb") as fp:
+                    json.dump(twitter_data, fp)
+                w.add_sheet(sheet_name, twitter_data)
 
         w.close_workbook()
 
