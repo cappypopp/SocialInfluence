@@ -23,7 +23,8 @@ class TestExcelWriter(unittest.TestCase):
     def setUpClass(cls):
         with open("../" + APP.FIRST_TOUCH_FILE, "r") as fp:
             data = json.load(fp, encoding="utf-8")
-            cls.sheet_data = data[:20]  # just peel off 20 items
+
+            cls.sheet_data = data[:20] if len(data) > 20 else data[:] # just peel off 20 items at most
 
         cls.TEST_DIR = u"test-data"
         cls.TEST_WORKBOOK = u"test-workbook.xlsx"
@@ -61,11 +62,11 @@ class TestExcelWriter(unittest.TestCase):
 
     @utils.logged()
     def test_data_row_expected_length(self):
-        self.assertEqual(len(self.sheet_data[0]), 7)
+        self.assertEqual(len(self.sheet_data[0]), 12)
 
     @utils.logged()
     def test_data_expected_length(self):
-        self.assertEqual(len(self.sheet_data), 20)
+        self.assertLess(len(self.sheet_data), 21)
 
     @utils.logged()
     def test_create_test_workbook_INTEGRATION(self):
