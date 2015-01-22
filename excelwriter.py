@@ -96,9 +96,10 @@ class ExcelWriter(object):
                                              datetime.datetime.strptime(x, self.DEFAULT_DATE_FORMAT),
                                              excel_format_func="write_datetime")
 
-        #post_date_day = ExcelWriter.ColumnFormat()
-        #post_date_day.__dict__.update(post_date.__dict__)
-        #post_date.name = "DayOnlyDate"
+        post_message = ExcelWriter.ColumnFormat(workbook=self._wb,
+                                                name="PostMessage",
+                                                col_width=50,
+                                                text_wrap=True)
 
         post_date_day = ExcelWriter.ColumnFormat(workbook=self._wb,
                                                  name="DayOnlyDate",
@@ -108,11 +109,6 @@ class ExcelWriter(object):
                                                  data_format=lambda x:
                                                  datetime.datetime.strptime(x, self.DEFAULT_DATE_FORMAT),
                                                  excel_format_func="write_datetime")
-
-        post_message = ExcelWriter.ColumnFormat(workbook=self._wb,
-                                                name="PostMessage",
-                                                col_width=50,
-                                                text_wrap=True)
 
         # shallow class attribute copies
         reply_date = ExcelWriter.ColumnFormat()
@@ -146,11 +142,13 @@ class ExcelWriter(object):
                                        data_format=lambda x: float(x),
                                        excel_format_func="write_number")
 
+        # TODO: BRITTLE - the first 4 columns here must be in this order or the data from unanswered tweets will cause
+        # an error when written (because data format won't match)
         self._col_headers = [post_id,
                              post,
                              post_date,
-                             post_date_day,
                              post_message,
+                             post_date_day,
                              reply_date,
                              reply_message,
                              gos,
@@ -165,6 +163,7 @@ class ExcelWriter(object):
         self._ws[name] = worksheet
 
         # only enumerate the headers for which we have columns of sheet_data
+        # TODO: FIX to handle unanswered tweets! Only need 4 columns
         for i, header in enumerate(self._col_headers[0: len(sheet_data[0])]):
 
             fmt = self._wb.add_format()
