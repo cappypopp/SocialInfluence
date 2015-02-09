@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.DEBUG,
 
 # create console handler
 ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
+ch.setLevel(logging.INFO)
 # create formatter and add it to the console handler
 formatter = logging.Formatter('%(name)s[%(lineno)d]: %(message)s')
 ch.setFormatter(formatter)
@@ -135,7 +135,7 @@ def excel_date(datestring):
 def load_tweets_from_csv(filename):
     # TODO: make these sets - we just iterate over them
     tweets = {'avg': [], 'user': []}
-    csv_file = "{}/{}".format(twitter_data_dir, filename)
+    csv_file = u"{}/{}".format(twitter_data_dir, filename)
     if os.path.isfile(csv_file):
         with open(csv_file, 'rb') as fp:
             reader = csv.DictReader(fp)
@@ -226,7 +226,7 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
         ut = saved_tweets["user_tweet"]
 
         # fill out the csv data row
-        csv_first_row["PostId"] = ut.GetId()
+        csv_first_row["PostId"] = unicode(ut.GetId())
         csv_first_row["Post"] = ut.GetUrl()
         csv_first_row["PostDate"] = ut.GetTweetTimeForExcel()
         csv_first_row["DayOnlyDate"] = ut.GetTweetTimeForExcel()
@@ -238,7 +238,7 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
         csv_first_row["GOS"] = time_between_tweets_in_hours(ut, ft)
         csv_first_row["Zach"] = u"Y" if search(r"\^ZCS?", tweet_text, IGNORECASE) else u"N"
         csv_first_row["Aiyman"] = u"Y" if search(r"\^AHS?", tweet_text, IGNORECASE) else u"N"
-        csv_first_row["Esc"] = u"Y" if search(r"#AVGSupport|@AVGSupport", tweet_text, IGNORECASE) else u"N"
+        csv_first_row["Esc"] = u"Y" if search(r"#AVGSupport|@AVGSupport|\^AHS|\^ZCS", tweet_text, IGNORECASE) else u"N"
         csv_first_row["CZ"] = u"Y" if search(r"\^(JM|ZP)", tweet_text, IGNORECASE) else u"N"
 
         logger.debug(csv_first_row)
@@ -246,7 +246,7 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
                                                                  ft.GetId(), csv_first_row["GOS"]))
         csv_data["first"].append(csv_first_row)
         db_list = csv_first_row.copy()  # shallow-copy the dict to add new fields to not upset old code
-        db_list["ReplyPostId"] = ft.GetId()  # needed for DB
+        db_list["ReplyPostId"] = unicode(ft.GetId())  # needed for DB
         db_list["GOSType"] = "first_touch"
         # db.save_gos_interaction(db_list)
 
@@ -271,7 +271,7 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
         if fs:
             csv_support_row = {}
 
-            csv_support_row["PostId"] = ut.GetId()
+            csv_support_row["PostId"] = unicode(ut.GetId())
             csv_support_row["Post"] = ut.GetUrl()
             csv_support_row["PostDate"] = ut.GetTweetTimeForExcel()
             csv_support_row["DayOnlyDate"] = ut.GetTweetTimeForExcel()
@@ -284,7 +284,7 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
 
             csv_support_row["Zach"] = u"Y" if search(r"\^ZCS?", tweet_text, IGNORECASE) else u"N"
             csv_support_row["Aiyman"] = u"Y" if search(r"\^AHS?", tweet_text, IGNORECASE) else u"N"
-            csv_support_row["Esc"] = u"Y" if search(r"#AVGSupport|@AVGSupport", tweet_text, IGNORECASE) else u"N"
+            csv_support_row["Esc"] = u"Y" if search(r"#AVGSupport|@AVGSupport|\^AHS|\^ZCS", tweet_text, IGNORECASE) else u"N"
             csv_support_row["CZ"] = u"Y" if search(r"\^(JM|ZP)", tweet_text, IGNORECASE) else u"N"
 
             logger.debug("GOS [support user:{} support:{}]: {}".format(csv_support_row["PostId"], fs.GetId(),
@@ -293,7 +293,7 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
             csv_data["support"].append(csv_support_row)
             # TODO: fix this
             db_list = csv_support_row.copy()  # shallow-copy the dict for DB to not mess up existing code
-            db_list["ReplyPostId"] = fs.GetId()  # needed for DB
+            db_list["ReplyPostId"] = unicode(fs.GetId())  # needed for DB
             db_list["GOSType"] = "support"
             # db.save_gos_interaction(db_list)
 
@@ -485,9 +485,13 @@ def get_twitter_status_from_api(tweet_id, parent_id, tweets_to_cache, tweets_pro
             # wait for the amount of time the rate limiter suggests before continuing
             do_api_sleep()
 
+        if TWITTER.TWITTER_ERR_NO_STATUS_FOUND_WITH_THAT_ID == code:
+            logger.info(tweet_id)
+
         if TWITTER.TWITTER_ERR_TWEET_NOT_FOUND == code or \
-                        TWITTER.TWITTER_ERR_USER_PROTECTED_TWEETS == code or \
-                        TWITTER.TWITTER_ERR_USER_SUSPENDED == code:
+            TWITTER.TWITTER_ERR_USER_PROTECTED_TWEETS == code or \
+            TWITTER.TWITTER_ERR_USER_SUSPENDED == code or \
+            TWITTER.TWITTER_ERR_NO_STATUS_FOUND_WITH_THAT_ID == code:
             # tweet not found - either the original user deleted it or twitter is not
             # providing it via the API. status code 179 means we're not authorized to view
             # that tweet, same diff
@@ -536,7 +540,7 @@ def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, tweets_processed, t
 
                 tweet_time = tw.created_at if isinstance(tw.created_at, datetime.datetime) else \
                     parse(tw.created_at)
-                row = [tw.id,
+                row = [unicode(tw.id),
                        u"http://twitter.com/{}/status/{}".format(tw.user.id, tw.id),
                        unicode(tweet_time.strftime(TWITTER.TWITTER_TIME_FORMAT)),
                        tw.text]
@@ -563,18 +567,26 @@ def write_output_csv(csv_data, csv_file, csv_headers):
             for result_row in csv_data:
                 dw.writerow(result_row)
 
+def add_facebook_data(excel_data, db):
+    excel_data["FB-First Touch Data"] = db.get_fb_first_touch_posts()
+    excel_data["FB-Support Data"] = db.get_fb_support_first_touch_posts()
+    excel_data["FB-No Answer"] = db.get_fb_unanswered_posts()
+    excel_data["FB-All User Post Data"] = db.get_all_fb_posts()
 
-def write_to_excel(excel_data, filename="TW-FirstTouchDataTest.xlsx"):
+def write_to_excel(excel_data, db, filename="TW-FirstTouchDataTest.xlsx"):
     if len(excel_data['TW-First Touch Data']):
+
+        add_facebook_data(excel_data, db)
+
         w = excelwriter.ExcelWriter()
 
         w.create_workbook("{}/{}".format(twitter_data_dir, filename))
 
-        for sheet_name, twitter_data in excel_data.iteritems():
-            if len(twitter_data):
+        for sheet_name, gos_data in excel_data.iteritems():
+            if len(gos_data):
                 with open("{}/{}.json".format(twitter_data_dir, sheet_name), "wb") as fp:
-                    json.dump(twitter_data, fp)
-                w.add_sheet(sheet_name, twitter_data)
+                    json.dump(gos_data, fp)
+                w.add_sheet(sheet_name, gos_data)
 
         w.close_workbook()
 
@@ -676,6 +688,8 @@ def get_twitter_gos(cmd_line_args):
     # TODO: genericize this - targeted at AVG only
     for tweet in tweet_ids_from_csv['avg']:
 
+        # check if we already have an entry for the GOS for this tweet, if so, we're done
+
         # data structure to hold the latest tweets in our
         # parsing of a conversation thread
         support_tweets = {"user_tweet": None,
@@ -725,8 +739,13 @@ def get_twitter_gos(cmd_line_args):
                 continue
             else:
                 try:
-                    tw = get_twitter_status_from_api(tweet_id, parent_id, tweets_to_cache, processed,
-                                                     tweets_not_found, support_tweets, db)
+                    tw = get_twitter_status_from_api(tweet_id,
+                                                     parent_id,
+                                                     tweets_to_cache,
+                                                     processed,
+                                                     tweets_not_found,
+                                                     support_tweets,
+                                                     db)
 
                 #  TODO: not clean, hides Twitter exceptions that I don't process
                 except TwitterContinueProcessing as e:
@@ -771,7 +790,7 @@ def get_twitter_gos(cmd_line_args):
         # write_output_csv(csv_data["first"], csv_first_file, csv_headers)
         # write_output_csv(csv_data["support"], csv_support_file, csv_headers)
 
-        write_to_excel(excel_data, cmd_line_args.output)
+        write_to_excel(excel_data, db, cmd_line_args.output)
 
     # write out tweets to cache
     if not cmd_line_args.nocache:
@@ -780,8 +799,10 @@ def get_twitter_gos(cmd_line_args):
 
 def time_between_tweets_in_hours(tw1, tw2):
     #TODO: handle encoding correctly
-    tweet1_time = tw1.created_at if isinstance(tw1.created_at, datetime.datetime) else parse(tw1.created_at.encode("utf-8"))
-    tweet2_time = tw2.created_at if isinstance(tw2.created_at, datetime.datetime) else parse(tw2.created_at.encode("utf-8"))
+    tweet1_time = tw1.created_at if isinstance(tw1.created_at, datetime.datetime) else \
+        parse(tw1.created_at.encode("utf-8"))
+    tweet2_time = tw2.created_at if isinstance(tw2.created_at, datetime.datetime) else \
+        parse(tw2.created_at.encode("utf-8"))
     diff = tweet2_time - tweet1_time
     return u"{:0.1f}".format(diff.total_seconds() / 60 / 60)
 
