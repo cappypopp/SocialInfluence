@@ -4,7 +4,7 @@ import logging
 import datetime
 from functools import wraps
 
-EXCEL_DATETIME_FORMAT_STRING = "%m/%d/%Y %I:%M:%S %p"
+EXCEL_DATETIME_FORMAT_STRING = u"%m/%d/%Y %I:%M:%S %p"
 
 def logged(level=logging.DEBUG, name=None, message=None):
     def decorate(func):
