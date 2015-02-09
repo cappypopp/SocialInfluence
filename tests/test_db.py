@@ -7,6 +7,7 @@ from tlinsights import db
 import json
 import logging
 from tlinsights.constants import DB
+from tlinsights import utils
 from twitter import Status, User
 
 logger = logging.getLogger(__name__)
@@ -128,7 +129,6 @@ json_tweets = r"""
   }]
 """
 
-
 class TestDB(unittest.TestCase):
 
     @classmethod
@@ -142,28 +142,70 @@ class TestDB(unittest.TestCase):
     def setUp(self):
         pass
 
+    @utils.logged()
     def test_save_tweet(self):
+        self.tweet1.unanswered = False
         result = self.DB.save_tweet(self.tweet1)
         self.assertIsNotNone(result)
 
+    @utils.logged()
     def test_save_user(self):
         result = self.DB.save_user(self.tweet1.user)
         self.assertIsNotNone(result)
 
+    @utils.logged()
     def test_get_tweet_by_id_with_bad_id(self):
         tweet_id = 123
         result = self.DB.get_tweet_by_id(tweet_id)
         self.assertIsNone(result, "Tweet with id {:d} should not be found".format(tweet_id))
 
+    @utils.logged()
     def test_get_twitter_user_by_id_with_bad_id(self):
         user_id = 123
         result = self.DB.get_user_by_id(user_id)
         self.assertIsNone(result, "User with id {:d} should not be found".format(user_id))
 
+    @utils.logged()
     def test_get_twitter_user_by_id_with_good_id(self):
         user_id = 403394026  # AVGBusiness
         result = self.DB.get_user_by_id(user_id)
         self.assertIsNotNone(result, "User {:d} should be found and not None".format(user_id))
+
+    @utils.logged()
+    def test_get_all_fb_posts_INTEGRATION(self):
+        result = self.DB.get_all_fb_posts()
+        self.assertIsInstance(result, list)
+        self.assertIsNotNone(result)
+        self.assertGreater(result, 1000)
+        logger.debug(str(len(result)) + " posts returned")
+        self.assertTrue(len(result[0]) == 4)
+
+    @utils.logged()
+    def test_get_fb_first_touch_posts_INTEGRATION(self):
+        result = self.DB.get_fb_first_touch_posts()
+        self.assertIsInstance(result, list)
+        self.assertIsNotNone(result)
+        self.assertGreater(result, 1000)
+        self.assertTrue(len(result[0]) == 7)
+        logger.debug(str(len(result)) + " posts returned")
+
+    @utils.logged()
+    def test_get_fb_support_first_touch_posts_INTEGRATION(self):
+        result = self.DB.get_fb_support_first_touch_posts()
+        self.assertIsInstance(result, list)
+        self.assertIsNotNone(result)
+        self.assertGreater(result, 500)
+        self.assertTrue(len(result[0]) == 11)
+        logger.debug(str(len(result)) + " posts returned")
+
+    @utils.logged()
+    def test_get_all_fb_unanswered_posts_INTEGRATION(self):
+        result = self.DB.get_fb_unanswered_posts()
+        self.assertIsInstance(result, list)
+        self.assertIsNotNone(result)
+        self.assertGreater(result, 250)
+        self.assertTrue(len(result[0]) == 4)
+        logger.debug(str(len(result)) + " posts returned")
 
 if __name__ == '__main__':
     unittest.main()

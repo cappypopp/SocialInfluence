@@ -10,13 +10,23 @@ import twitter
 import MySQLdb as mdb
 import MySQLdb.cursors as cursors
 
-from constants import DB, TWITTER
+from constants import DB, TWITTER, FB
 
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+# create console handler
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+# create formatter and add it to the console handler
+formatter = logging.Formatter('%(name)s[%(lineno)d]: %(message)s')
+ch.setFormatter(formatter)
+logger.addHandler(ch)
 
 class TLInsightsDB(object):
+
+    # very simple enum type
+    QUERY_BASE, QUERY_GOS, QUERY_FULL = range(3)
 
     def __init__(self, db_name=DB.DB_NAME):
         try:
@@ -24,7 +34,7 @@ class TLInsightsDB(object):
                                    charset=DB.DB_CHARSET, cursorclass=cursors.DictCursor)
             self.cur = self.cxn.cursor()
         except mdb.MySQLError as err:
-            logger.error("Error: {:d}{}".format(err.args[0], err.args[1]))
+            logger.error("Error: {:d} {}".format(err.args[0], err.args[1]))
             exit(err.args[0])
 
     def _query_tag_decorator(tags):  # used to pass args to decorator (decorator generator)
@@ -39,6 +49,38 @@ class TLInsightsDB(object):
                     logger.debug(self.cur._last_executed)
             return decorated_query
         return _query_decorator
+
+    @_query_tag_decorator("cursor closed or invalid")
+    def _build_gos_query_results(self, query_type):
+        result = []
+        while True:
+
+            tmp = []
+
+            row = self.cur.fetchone()
+
+            if row is not None:
+
+                tmp.append(row["postID"])
+                tmp.append(row["Post"])
+                tmp.append(row["PostDate"])
+                tmp.append(row["PostMessage"])
+
+                if query_type > self.QUERY_BASE:
+                    tmp.append(row["ReplyDate"])
+                    tmp.append(row["ReplyMessage"])
+                    tmp.append(row["GOS"])
+
+                if query_type > self.QUERY_GOS:
+                    tmp.append(row["Zach"])
+                    tmp.append(row["Aiyman"])
+                    tmp.append(row["Esc"])
+                    tmp.append(row["CZ"])
+
+                result.append(tmp)
+            else:
+                break
+        return result
 
     @_query_tag_decorator("tweet not found")
     def get_tweet_by_id(self, tweet_id):
@@ -111,7 +153,7 @@ class TLInsightsDB(object):
     @_query_tag_decorator("tweet not found")
     def get_user_by_id(self, user_id):
         with self.cxn:
-            q = "SELECT * from u WHERE id = %s"
+            q = "SELECT * from twusers WHERE id = %s"
             self.cur.execute(q, (user_id,))  # has to be a tuple, thus the ending comma
             result = self.cur.fetchone()
         return result
@@ -297,7 +339,7 @@ class TLInsightsDB(object):
 
         with self.cxn:
 
-            q = """INSERT INTO u (
+            q = """INSERT INTO twusers (
                                     id,
                                     name,
                                     created_at,
@@ -375,6 +417,154 @@ class TLInsightsDB(object):
 
             return result
 
+    @_query_tag_decorator("FB all posts not found")
+    def get_all_fb_posts(self):
+
+            q = """SELECT fbposts.postID,
+                   concat("https://www.facebook.com/permalink.php?id=%(fb_page_id)s&v=wall&story_fbid=",
+                      substring(fbposts.postID FROM 13)) as Post,
+                   fbposts.date as PostDate,
+                   fbposts.message as PostMessage
+                   from fbposts
+                      where fbposts.pageID = %(fb_page_id)s
+                      and (fbposts.date between '2014-10-01 00:00:00' and NOW())
+                      and fbposts.fromUserID != %(fb_page_id)s
+                      order by fbposts.date
+                      ASC;"""
+
+            arg_dict = {
+                "fb_page_id": FB.FB_PAGE_ID
+            }
+
+            result = []
+            with self.cxn:
+                records = self.cur.execute(q, arg_dict)
+                if records > 0:
+                    result = self._build_gos_query_results(self.QUERY_BASE)
+            return result
+
+    @_query_tag_decorator("FB first touch posts not found")
+    def get_fb_first_touch_posts(self):
+        q = """select fbposts.postID,
+               concat("https://www.facebook.com/permalink.php?id=%(fb_page_id)s&v=wall&story_fbid=",
+                  substring(fbposts.postID FROM 13)) as Post,
+               fbposts.date as PostDate,
+               fbposts.message as PostMessage,
+               MIN(fbcomments.date) as ReplyDate,
+               fbcomments.message as ReplyMessage,
+               TIMESTAMPDIFF(Hour, MIN(fbcomments.date), fbposts.date)*-1 as GOS
+                  from fbcomments
+                  join fbposts on fbcomments.parentPostID = fbposts.postID
+                  where fbcomments.pageID = %(fb_page_id)s
+                  and fbposts.pageID = %(fb_page_id)s
+                  and (fbposts.date between "2014-10-01 00:00:00" and NOW())
+                  and (fbcomments.fromUserID = %(fb_page_id)s or fbcomments.fromUserID =%(fb_user_id)s)
+                  and fbposts.fromUserID != %(fb_page_id)s
+                  group by fbposts.date
+                  order by fbposts.date
+                  ASC;"""
+
+        arg_dict = {
+            "fb_page_id": FB.FB_PAGE_ID,
+            "fb_user_id": FB.FB_AVG_SUPPORT_USER_ID
+        }
+
+        result = []
+        with self.cxn:
+            records = self.cur.execute(q, arg_dict)
+            if records > 0:
+                result = self._build_gos_query_results(self.QUERY_GOS)
+        return result
+
+    @_query_tag_decorator("FB unanswered posts not found")
+    def get_fb_unanswered_posts(self):
+        q = """select fbposts.postID,
+               concat("https://www.facebook.com/permalink.php?id=%(fb_page_id)s&v=wall&story_fbid=",
+                  substring(fbposts.postID FROM 13)) as Post,
+               fbposts.date as PostDate,
+               fbposts.message as PostMessage
+               from fbposts where pageID = %(fb_page_id)s
+               and fromUserID != %(fb_page_id)s
+               and (date between "2014-10-01 00:00:00" and NOW())
+               and postID not in (
+                  select distinct parentPostID
+                  from fbcomments
+                  where ( fbcomments.fromUserID = %(fb_page_id)s or fbcomments.fromUserID =%(fb_user_id)s)
+                  and (date between "2014-10-01 00:00:00" and NOW())
+                  order by date
+                  desc)
+               order by date
+               ASC;"""
+
+        arg_dict = {
+            "fb_page_id": FB.FB_PAGE_ID,
+            "fb_user_id": FB.FB_AVG_SUPPORT_USER_ID
+        }
+
+        result = []
+        with self.cxn:
+            records = self.cur.execute(q, arg_dict)
+            if records > 0:
+                result = self._build_gos_query_results(self.QUERY_BASE)
+        return result
+
+    @_query_tag_decorator("FB support posts not found")
+    def get_fb_support_first_touch_posts(self):
+
+        q = """select fbposts.postID, concat("https://www.facebook.com/permalink.php?id=%(fb_page_id)s&v=wall&story_fbid=",
+                  substring(fbposts.postID FROM 13)) as Post,
+               fbposts.date as PostDate,
+               fbposts.message as PostMessage,
+               MIN(fbcomments.date) as ReplyDate,
+               fbcomments.message as ReplyMessage,
+               TIMESTAMPDIFF(Hour, MIN(fbcomments.date), fbposts.date) * -1 as GOS,
+	           IF(fbcomments.message LIKE "%(zach)s" = 1,"Y","N") as Zach,
+	           IF(fbcomments.message LIKE "%(aiyman)s" = 1,"Y","N") as Aiyman,
+	           IF(fbcomments.message REGEXP BINARY "#AVGSupport" = 1,"Y","N") as Esc,
+	           IF(fbcomments.message REGEXP BINARY "AVG Customer Care" = 1,"Y","N") as CZ,
+	           fbcomments.fromUserID as replyAccount
+	           from fbcomments
+               join fbposts ON fbcomments.parentPostID = fbposts.postID
+               where fbcomments.pageID = %(fb_page_id)s
+               and fbposts.pageID = %(fb_page_id)s
+		       and fbposts.fromUserID != %(fb_page_id)s
+               and (fbposts.date between '2014-10-01 00:00:00' and NOW())
+		       #All the responses are support responses
+               and (
+				#either from the page as an escalation or as a support reply
+				(fbcomments.fromUserID = %(fb_page_id)s
+					and (
+						fbcomments.message REGEXP BINARY "#AVGSupport"
+						or
+						fbcomments.message LIKE "%(aiyman)s"
+						or
+						fbcomments.message LIKE "%(zach)s"
+						or
+						fbcomments.message REGEXP BINARY "AVG Customer Care"
+					)
+				)
+				or fbcomments.fromUserID = %(fb_user_id)s
+		       )
+               group by fbposts.date
+               order by fbposts.date
+               ASC;"""
+
+        arg_dict = {
+            "fb_page_id": FB.FB_PAGE_ID,
+            "fb_user_id": FB.FB_AVG_SUPPORT_USER_ID,
+            "zach": "%^ZCS%",
+            "aiyman": "%^AHS%"
+        }
+
+        result = []
+
+        with self.cxn:
+            records = self.cur.execute(q, arg_dict)
+            if records > 0:
+                result = self._build_gos_query_results(self.QUERY_FULL)
+
+        return result
+
     @classmethod
     def _check_and_decode_val(cls, d, k):
         v = d.get(k, None)
@@ -384,7 +574,7 @@ class TLInsightsDB(object):
     @classmethod
     def _decode_if_string(cls, val):
         # originally had basestring in the isinstance call but this caused unicode strings to call decode("utf8") as well
-         return val.decode("utf8") if isinstance(val, str) else val
+        return val.decode("utf8") if isinstance(val, str) else val
 
     @_query_tag_decorator("can't save gos")
     def save_gos_interaction(self, gos_dict):
