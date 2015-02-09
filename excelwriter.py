@@ -23,7 +23,7 @@ class ExcelWriter(object):
             text_wrap: True: wrap text, False: don't
             excel_format_func: text name of XlsxWriter data writing method to add values to a cell
             excel_format_func_args: extra arguments for writing function, if any (like link name for write_url)
-            force_use: use whatever this value is as the data no matter what's passed
+            data_override: use whatever this value is as the data no matter what's passed
 
         """
         def __init__(self,
@@ -35,14 +35,14 @@ class ExcelWriter(object):
                      text_wrap=False,
                      excel_format_func="write_string",
                      excel_format_func_args=None,
-                     force_use=None):
+                     data_override=None):
             self.name = name
             self.col_width = col_width
             self.data_format = data_format
             self.text_wrap = text_wrap
             self.excel_format_func = excel_format_func
             self.excel_format_func_args = excel_format_func_args
-            self.force_use = force_use
+            self.data_override = data_override
 
             # set the excel workbook global format - nasty bug
             # here - original code passed raw objects to write_* methods
@@ -74,12 +74,19 @@ class ExcelWriter(object):
 
         self._wb = xlsxwriter.Workbook(name)
 
+        """
         post_id = ExcelWriter.ColumnFormat(workbook=self._wb,
                                            name="PostID",
                                            col_width=11.3,
                                            format_obj={"font_size": 9},
                                            data_format=lambda x: int(x),
                                            excel_format_func="write_number")
+        """
+
+        post_id = ExcelWriter.ColumnFormat(workbook=self._wb,
+                                           name="PostID",
+                                           col_width=11,
+                                           format_obj={"font_size": 9})
 
         post = ExcelWriter.ColumnFormat(workbook=self._wb,
                                         name="Post",
@@ -110,7 +117,7 @@ class ExcelWriter(object):
                                                  format_obj={"font_size": 9,
                                                              "num_format": "mm/dd/yy"},
                                                  excel_format_func="write_formula",
-                                                 force_use='=DATEVALUE(CONCATENATE(MONTH([PostDate]),'
+                                                 data_override='=DATEVALUE(CONCATENATE(MONTH([PostDate]),'
                                                            '"/",DAY([PostDate]),"/",YEAR([PostDate])))')
 
         # shallow class attribute copies
@@ -212,8 +219,8 @@ class ExcelWriter(object):
                 # can call them dynamically.
                 excel_cell_write_fn = getattr(worksheet, header.excel_format_func)
 
-                data_val = row[col_num] if self._col_headers[col_num].force_use is None else \
-                    self._col_headers[col_num].force_use
+                data_val = row[col_num] if self._col_headers[col_num].data_override is None else \
+                    self._col_headers[col_num].data_override
 
                 # build function arguments - doing it this way so we can conditionally add the final argument if present
                 arg_tuple = (rn,
