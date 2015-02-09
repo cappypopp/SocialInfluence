@@ -10,6 +10,7 @@ import twitter
 import MySQLdb as mdb
 import MySQLdb.cursors as cursors
 
+import utils
 from constants import DB, TWITTER, FB
 
 
@@ -62,12 +63,14 @@ class TLInsightsDB(object):
             if row is not None:
 
                 tmp.append(row["postID"])
-                tmp.append(row["Post"])
-                tmp.append(row["PostDate"])
+                tmp.append(FB.fb_post_url_from_user_and_post_id(FB.FB_PAGE_ID, row["postID"]))
+                tmp.append(unicode(datetime.strftime(row["PostDate"], utils.EXCEL_DATETIME_FORMAT_STRING)))
                 tmp.append(row["PostMessage"])
 
                 if query_type > self.QUERY_BASE:
-                    tmp.append(row["ReplyDate"])
+                    # adding 2 rows of the same date - one will be munged by the DayOnlyDate formula
+                    tmp.append(unicode(datetime.strftime(row["ReplyDate"], utils.EXCEL_DATETIME_FORMAT_STRING)))
+                    tmp.append(unicode(datetime.strftime(row["ReplyDate"], utils.EXCEL_DATETIME_FORMAT_STRING)))
                     tmp.append(row["ReplyMessage"])
                     tmp.append(row["GOS"])
 
@@ -421,8 +424,6 @@ class TLInsightsDB(object):
     def get_all_fb_posts(self):
 
             q = """SELECT fbposts.postID,
-                   concat("https://www.facebook.com/permalink.php?id=%(fb_page_id)s&v=wall&story_fbid=",
-                      substring(fbposts.postID FROM 13)) as Post,
                    fbposts.date as PostDate,
                    fbposts.message as PostMessage
                    from fbposts
@@ -446,8 +447,6 @@ class TLInsightsDB(object):
     @_query_tag_decorator("FB first touch posts not found")
     def get_fb_first_touch_posts(self):
         q = """select fbposts.postID,
-               concat("https://www.facebook.com/permalink.php?id=%(fb_page_id)s&v=wall&story_fbid=",
-                  substring(fbposts.postID FROM 13)) as Post,
                fbposts.date as PostDate,
                fbposts.message as PostMessage,
                MIN(fbcomments.date) as ReplyDate,
@@ -479,8 +478,6 @@ class TLInsightsDB(object):
     @_query_tag_decorator("FB unanswered posts not found")
     def get_fb_unanswered_posts(self):
         q = """select fbposts.postID,
-               concat("https://www.facebook.com/permalink.php?id=%(fb_page_id)s&v=wall&story_fbid=",
-                  substring(fbposts.postID FROM 13)) as Post,
                fbposts.date as PostDate,
                fbposts.message as PostMessage
                from fbposts where pageID = %(fb_page_id)s
@@ -511,8 +508,7 @@ class TLInsightsDB(object):
     @_query_tag_decorator("FB support posts not found")
     def get_fb_support_first_touch_posts(self):
 
-        q = """select fbposts.postID, concat("https://www.facebook.com/permalink.php?id=%(fb_page_id)s&v=wall&story_fbid=",
-                  substring(fbposts.postID FROM 13)) as Post,
+        q = """select fbposts.postID,
                fbposts.date as PostDate,
                fbposts.message as PostMessage,
                MIN(fbcomments.date) as ReplyDate,
