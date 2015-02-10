@@ -211,8 +211,7 @@ def load_tweets_from_json():
 
     return rehydrated_tweets, tweets_to_cache, dead_tweets
 
-
-def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
+def add_csv_row(already_seen, csv_data, excel_data, saved_tweets, db):
     # verify that we've found first touch and user tweets and placed them in our data structure
     if saved_tweets["first_touch"] and saved_tweets["user_tweet"]:
 
@@ -248,7 +247,7 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
         db_list = csv_first_row.copy()  # shallow-copy the dict to add new fields to not upset old code
         db_list["ReplyPostId"] = unicode(ft.GetId())  # needed for DB
         db_list["GOSType"] = "first_touch"
-        # db.save_gos_interaction(db_list)
+        db.save_gos_interaction(db_list)
 
         excel_first_row = [
             csv_first_row["PostId"],
@@ -295,7 +294,7 @@ def add_csv_row(already_seen, csv_data, excel_data, saved_tweets):
             db_list = csv_support_row.copy()  # shallow-copy the dict for DB to not mess up existing code
             db_list["ReplyPostId"] = unicode(fs.GetId())  # needed for DB
             db_list["GOSType"] = "support"
-            # db.save_gos_interaction(db_list)
+            db.save_gos_interaction(db_list)
 
             excel_support_row = [
                 csv_support_row["PostId"],
@@ -532,12 +531,6 @@ def write_unanswered_tweets(user_tweet_ids, tweets_to_cache, tweets_processed, t
                     logger.debug("This tweet was in cache but unanswered: {}".format(tweet_id))
                     #tw = tweets_to_cache[tweet_id]
 
-                #row = [tw['id'],
-                #       "http://twitter.com/{}/status/{}".format(tw['user']['id'],
-                #                                                tw['id']),
-                #       parse(tw['created_at']).strftime(TWITTER.TWITTER_TIME_FORMAT),
-                #       tw['text']]
-
                 tweet_time = tw.created_at if isinstance(tw.created_at, datetime.datetime) else \
                     parse(tw.created_at)
                 row = [unicode(tw.id),
@@ -719,6 +712,16 @@ def get_twitter_gos(cmd_line_args):
             # for debugging output - will be used in process_tweet for output
             cached = False
 
+            # check if we have GOS data for this tweet already
+            gos = db.get_gos_for_tweet_id(tweet_id)
+
+            if len(gos):
+                # resets outer loop to fetch next AVG tweet off stack
+                tweet_id = None
+                category = "TW-First Touch Data" if gos["gos_type"] == "first_touch" else "TW-Support First Touch Data"
+                excel_data[category].append(gos["gos_data"])
+                continue
+
             # get the tweet from the DB
             tw = db.get_tweet_by_id(tweet_id)
 
@@ -776,7 +779,7 @@ def get_twitter_gos(cmd_line_args):
         if support_tweets and support_tweets["user_tweet"] is not None and \
             support_tweets["user_tweet"].id not in processed:
             processed.add(support_tweets["user_tweet"].id)
-            add_csv_row(already_seen, csv_data, excel_data, support_tweets)
+            add_csv_row(already_seen, csv_data, excel_data, support_tweets, db)
 
         # clean up
         del support_tweets
