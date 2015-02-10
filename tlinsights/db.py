@@ -521,26 +521,26 @@ class TLInsightsDB(object):
 	           fbcomments.fromUserID as replyAccount
 	           from fbcomments
                join fbposts ON fbcomments.parentPostID = fbposts.postID
-               where fbcomments.pageID = %(fb_page_id)s
-               and fbposts.pageID = %(fb_page_id)s
-		       and fbposts.fromUserID != %(fb_page_id)s
-               and (fbposts.date between '2014-10-01 00:00:00' and NOW())
-		       #All the responses are support responses
-               and (
-				#either from the page as an escalation or as a support reply
-				(fbcomments.fromUserID = %(fb_page_id)s
-					and (
-						fbcomments.message REGEXP BINARY "#AVGSupport"
-						or
-						fbcomments.message LIKE "%(aiyman)s"
-						or
-						fbcomments.message LIKE "%(zach)s"
-						or
-						fbcomments.message REGEXP BINARY "AVG Customer Care"
-					)
-				)
-				or fbcomments.fromUserID = %(fb_user_id)s
-		       )
+                   where fbcomments.pageID = %(fb_page_id)s
+                   and fbposts.pageID = %(fb_page_id)s
+                   and fbposts.fromUserID != %(fb_page_id)s
+                   and (fbposts.date between '2014-10-01 00:00:00' and NOW())
+                   #All the responses are support responses
+                   and (
+                    #either from the page as an escalation or as a support reply
+                    (fbcomments.fromUserID = %(fb_page_id)s
+                        and (
+                            fbcomments.message REGEXP BINARY "#AVGSupport"
+                            or
+                            fbcomments.message LIKE "%(aiyman)s"
+                            or
+                            fbcomments.message LIKE "%(zach)s"
+                            or
+                            fbcomments.message REGEXP BINARY "AVG Customer Care"
+                        )
+                    )
+                    or fbcomments.fromUserID = %(fb_user_id)s
+                   )
                group by fbposts.date
                order by fbposts.date
                ASC;"""
@@ -572,14 +572,77 @@ class TLInsightsDB(object):
         # originally had basestring in the isinstance call but this caused unicode strings to call decode("utf8") as well
         return val.decode("utf8") if isinstance(val, str) else val
 
+    @_query_tag_decorator("error looking up GOS")
+    def get_gos_for_tweet_id(self, tweet_id):
+        """excel_first_row = [
+            csv_first_row["PostId"],
+            csv_first_row["Post"],
+            csv_first_row["PostDate"],
+            csv_first_row["PostMessage"],
+            csv_first_row["DayOnlyDate"],
+            csv_first_row["ReplyDate"],
+            csv_first_row["ReplyMessage"],
+            csv_first_row["GOS"],
+            csv_first_row["Zach"],
+            csv_first_row["Aiyman"],
+            csv_first_row["Esc"],
+            csv_first_row["CZ"]
+        ]"""
+        
+        q ="""SELECT user_tweet_id as PostId,
+                     user_tweet_url as Post,
+                     user_tweet_date as PostDate,
+                     user_tweet_text as PostMessage,
+                     support_tweet_date as DayOnlyDate,
+                     support_tweet_date as ReplyDate,
+                     support_tweet_text as ReplyMessage,
+                     support_gos as GOS,
+                     IF(support_tweet_text LIKE "%(zach)s" = 1,"Y","N") as Zach,
+	                 IF(support_tweet_text LIKE "%(aiyman)s" = 1,"Y","N") as Aiyman,
+	                 IF(support_tweet_text REGEXP BINARY "#AVGSupport" = 1,"Y","N") as Esc,
+	                 IF(support_tweet_text REGEXP BINARY "AVG Customer Care" = 1,"Y","N") as CZ,
+                     gos_type
+              FROM twgos
+              WHERE support_tweet_id = %(tweet_id)s;"""
+
+        arg_dict = {
+            "zach": "%^ZCS%",
+            "aiyman": "%^AHS%",
+            "tweet_id": tweet_id
+        }
+
+        result = {}
+        with self.cxn:
+            records = self.cur.execute(q, arg_dict)
+            if records:
+                row = self.cur.fetchone()
+                if row is not None:
+                    result['gos_type'] = row['gos_type']
+                    result['gos_data'] = [
+                        unicode(row["PostId"]),
+                        row["Post"],
+                        unicode(row["PostDate"].strftime(utils.EXCEL_DATETIME_FORMAT_STRING)),
+                        row["PostMessage"],
+                        unicode(row["DayOnlyDate"].strftime(utils.EXCEL_DATETIME_FORMAT_STRING)),
+                        unicode(row["ReplyDate"].strftime(utils.EXCEL_DATETIME_FORMAT_STRING)),
+                        row["ReplyMessage"],
+                        row["GOS"],
+                        row["Zach"],
+                        row["Aiyman"],
+                        row["Esc"],
+                        row["CZ"]
+                    ]
+
+        return result
+
     @_query_tag_decorator("can't save gos")
     def save_gos_interaction(self, gos_dict):
 
-        with self.cxn:
-            # odd - the format string here is NOT REALLY A NORMAL FORMAT STRING. YOU MUST USE %s for
-            # all fields.
-            # See http://stackoverflow.com/questions/5785154/python-mysqldb-issues-typeerror-d-format-a-number-is-required-not-str
-            q = """INSERT IGNORE INTO twgos(user_tweet_id,
+
+        # odd - the format string here is NOT REALLY A NORMAL FORMAT STRING. YOU MUST USE %s for
+        # all fields.
+        # See http://stackoverflow.com/questions/5785154/python-mysqldb-issues-typeerror-d-format-a-number-is-required-not-str
+        q = """INSERT IGNORE INTO twgos(user_tweet_id,
                                             user_tweet_url,
                                             user_tweet_date,
                                             user_tweet_text,
@@ -589,18 +652,22 @@ class TLInsightsDB(object):
                                             support_gos,
                                             gos_type)
                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                   ON DUPLICATE KEY UPDATE ( support_gos = VALUES(support_gos));"""
-            arg_tuple = (long(gos_dict['PostId']),
-                         gos_dict['Post'],
-                         self._convert_time_from_twitter_to_mysql(gos_dict['PostDate']),
-                         gos_dict['PostMessage'],
-                         long(gos_dict['ReplyPostId']),
-                         self._convert_time_from_twitter_to_mysql(gos_dict['ReplyDate']),
-                         gos_dict['ReplyMessage'],
-                         gos_dict['GOS'],
-                         gos_dict['GOSType'])
+                   ON DUPLICATE KEY UPDATE
+                      support_gos = VALUES(support_gos);"""
+        arg_tuple = (long(gos_dict['PostId']),
+                     gos_dict['Post'],
+                     self._convert_between_time_formats(gos_dict['PostDate'],
+                                                        utils.EXCEL_DATETIME_FORMAT_STRING, DB.DB_TIME_FORMAT),
+                     gos_dict['PostMessage'],
+                     long(gos_dict['ReplyPostId']),
+                     self._convert_between_time_formats(gos_dict['ReplyDate'],
+                                                        utils.EXCEL_DATETIME_FORMAT_STRING, DB.DB_TIME_FORMAT),
+                     gos_dict['ReplyMessage'],
+                     gos_dict['GOS'],
+                     gos_dict['GOSType'])
+        with self.cxn:
             result = self.cur.execute(q, arg_tuple)
-            return result
+        return result
 
     @classmethod
     def _convert_time_from_twitter_to_mysql(cls, str_twitter_date):
@@ -614,50 +681,7 @@ class TLInsightsDB(object):
         newdt = dt.strftime(TWITTER.TWITTER_API_TIME_FORMAT)
         return newdt
 
-
-if __name__ == '__main__':
-    json_user = r"""{
-   "lang":"en",
-   "favorited":true,
-   "truncated":false,
-   "text":".@JudyatAVG: Fever Pitch: Live Final is inspiration to us all http://t.co/54zBwzzPPW - @AVGFree @AVGBusiness #AVG #thepitch14",
-   "created_at":"Tue Oct 28 10:22:28 +0000 2014",
-   "retweeted":false,
-   "source":"<a href=\"https://dev.twitter.com/docs/tfw\" rel=\"nofollow\">Twitter for Websites</a>",
-   "user":{
-      "id":403394026,
-      "profile_sidebar_fill_color":"DDEEF6",
-      "profile_text_color":"333333",
-      "followers_count":185,
-      "location":"Global",
-      "profile_background_color":"233A5C",
-      "listed_count":3,
-      "utc_offset":-28800,
-      "statuses_count":1241,
-      "description":"Follow us for news, insight, ideas and practical know-how for growing your MSP business",
-      "friends_count":101,
-      "profile_link_color":"0084B4",
-      "profile_image_url":"https://pbs.twimg.com/profile_images/2319098754/zfwde97dby5193r1iyt8_normal.jpeg",
-      "profile_banner_url":"https://pbs.twimg.com/profile_banners/403394026/1414157293",
-      "profile_background_image_url":"http://pbs.twimg.com/profile_background_images/778165478/6dd52db7f8bfeb0646bf1f39bbfabad7.jpeg",
-      "screen_name":"AVGBusiness",
-      "lang":"en",
-      "profile_background_tile":false,
-      "favourites_count":1,
-      "name":"AVG Business",
-      "url":"http://t.co/PxBfV9h5ds",
-      "created_at":"Wed Nov 02 12:51:23 +0000 2011",
-      "time_zone":"Pacific Time (US & Canada)",
-      "protected":false
-   },
-   "retweet_count":2,
-   "id":527042709786079233,
-   "favorite_count":1
-}"""
-    import json
-
-    tweet_json = json.loads(json_user)
-    tweet = Status.NewFromJsonDict(tweet_json)
-    db = TLInsightsDB(DB.DB_TEST_NAME)
-    db.save_tweet(tweet)
-    db.get_tweet_by_id(123)
+    @classmethod
+    def _convert_between_time_formats(cls, dt_string, existing_date_format, target_date_format):
+        dt = datetime.strptime(dt_string, existing_date_format)
+        return dt.strftime(target_date_format)
