@@ -828,17 +828,31 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description="Creates csv containing Gauge of Service data for tweets",
                                      version='%(prog)s 1.0')
-    parser.add_argument("-id", "--status_id", type=int, help="Just use this single tweet")
-    parser.add_argument("-ng", "--no_gos_lookup", action="store_true", help="Does not look in DB for existing GOS for"
-                                                                            "tweets - useful for debugging")
-    parser.add_argument("-nf", "--nofiles", dest="quiet", action="store_true", help="if present no excel files "
-                                                                                    "written, only output to stdout")
-    parser.add_argument("-nc", "--nocache", action="store_true", help="Does not use or write to tweet cache. Useful"
-                                                                      "for debugging Twitter API issues.")
-    # parser.add_argument("-t", "--access_token", type=str, default="rDFfVkx9dIyfjdni3AUEnA", nargs="?",
-    # help='Twitter access token')
-    parser.add_argument("-o", "--output", type=str, help="output file [*.xlsx]")
-    parser.add_argument("-i", "--input", type=str, help="input file [*.csv]")
+    parser.add_argument("-id",
+                        "--status_id",
+                        type=int,
+                        help="Only process this tweet; if not from AVG does nothing")
+    parser.add_argument("-ng",
+                        "--no_gos_lookup",
+                        action="store_true",
+                        help="Does not look in DB for existing GOS for tweets - useful for debugging")
+    parser.add_argument("-nf",
+                        "--nofiles",
+                        dest="quiet",
+                        action="store_true",
+                        help="if present no excel files written, only output to stdout")
+    parser.add_argument("-nc",
+                        "--nocache",
+                        action="store_true",
+                        help="Does not use or write to tweet cache. Useful for debugging Twitter API issues.")
+    parser.add_argument("-o",
+                        "--output",
+                        type=str,
+                        help="output file [*.xlsx]")
+    parser.add_argument("-i",
+                        "--input",
+                        type=str,
+                        help="input file [*.csv]")
     args = parser.parse_args()
     logger.debug("args: {}".format(str(sys.argv)))
     get_twitter_gos(args)
