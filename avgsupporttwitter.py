@@ -712,15 +712,16 @@ def get_twitter_gos(cmd_line_args):
             # for debugging output - will be used in process_tweet for output
             cached = False
 
-            # check if we have GOS data for this tweet already
-            gos = db.get_gos_for_tweet_id(tweet_id)
+            if not cmd_line_args.no_gos_lookup:
+                # check if we have GOS data for this tweet already
+                gos = db.get_gos_for_tweet_id(tweet_id)
 
-            if len(gos):
-                # resets outer loop to fetch next AVG tweet off stack
-                tweet_id = None
-                category = "TW-First Touch Data" if gos["gos_type"] == "first_touch" else "TW-Support First Touch Data"
-                excel_data[category].append(gos["gos_data"])
-                continue
+                if len(gos):
+                    # resets outer loop to fetch next AVG tweet off stack
+                    tweet_id = None
+                    category = "TW-First Touch Data" if gos["gos_type"] == "first_touch" else "TW-Support First Touch Data"
+                    excel_data[category].append(gos["gos_data"])
+                    continue
 
             # get the tweet from the DB
             tw = db.get_tweet_by_id(tweet_id)
@@ -828,6 +829,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Creates csv containing Gauge of Service data for tweets",
                                      version='%(prog)s 1.0')
     parser.add_argument("-id", "--status_id", type=int, help="Just use this single tweet")
+    parser.add_argument("-ng", "--no_gos_lookup", action="store_true", help="Does not look in DB for existing GOS for"
+                                                                            "tweets - useful for debugging")
     parser.add_argument("-nf", "--nofiles", dest="quiet", action="store_true", help="if present no excel files "
                                                                                     "written, only output to stdout")
     parser.add_argument("-nc", "--nocache", action="store_true", help="Does not use or write to tweet cache. Useful"
